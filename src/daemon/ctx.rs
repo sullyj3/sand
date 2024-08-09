@@ -1,32 +1,32 @@
-use std::path::PathBuf;
 use std::sync::Arc;
 use std::sync::Mutex;
 use std::time::Duration;
 use std::time::Instant;
 
 use notify_rust::Notification;
-use tokio::sync::oneshot;
+use rodio::OutputStreamHandle;
 use tokio::sync::Notify;
 
-use crate::sand::audio::Sound;
+use crate::sand::audio::ElapsedSoundPlayer;
 use crate::sand::timer::Timer;
 use crate::sand::timer::TimerId;
 use crate::sand::timer::TimerInfoForClient;
 use crate::sand::timers::Timers;
 
-#[derive(Debug, Clone)]
+#[derive(Clone)]
 pub struct DaemonCtx {
     next_id: Arc<Mutex<TimerId>>,
     timers: Arc<Timers>,
-    elapsed_sound: Option<Sound>,
+    player: Option<ElapsedSoundPlayer>,
 }
 
 impl DaemonCtx {
-    pub fn new(elapsed_sound: Option<Sound>) -> Self {
+    pub fn new(stream_handle: Option<OutputStreamHandle>) -> Self {
+        let player = stream_handle.and_then(|handle| ElapsedSoundPlayer::new(handle).ok());
         Self {
             timers: Default::default(),
             next_id: Arc::new(Mutex::new(Default::default())),
-            elapsed_sound,
+            player,
         }
     }
 
@@ -51,8 +51,11 @@ impl DaemonCtx {
             .urgency(notify_rust::Urgency::Critical)
             .show()
             .unwrap();
-        if let Some(ref sound) = self.elapsed_sound {
-            sound.play();
+        if let Some(ref player) = self.player {
+            eprintln!("playing sound");
+            player.play().unwrap();
+        } else {
+            eprintln!("not playing sound");
         }
         rx_added.notified().await;
         self.timers.elapse(id)

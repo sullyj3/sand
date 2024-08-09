@@ -2,6 +2,7 @@ mod handle_client;
 mod ctx;
 
 use std::io;
+use std::mem;
 use std::os::fd::FromRawFd;
 use std::os::fd::RawFd;
 use std::os::unix;
@@ -12,6 +13,7 @@ use std::str;
 use async_scoped;
 use async_scoped::TokioScope;
 use dirs;
+use rodio::OutputStream;
 use tokio;
 use tokio::net::UnixListener;
 use tokio::runtime::Runtime;
@@ -68,14 +70,18 @@ async fn accept_loop(listener: UnixListener, state: &DaemonCtx) {
     }
 }
 
-async fn daemon(fd: RawFd, o_sound_path: Option<PathBuf>) -> io::Result<()> {
+async fn daemon(fd: RawFd) -> io::Result<()> {
     eprintln!("daemon started.");
 
-    // TODO don't hardcode
-    let sound_path: PathBuf = "/usr/share/sand/timer_sound.flac".into();
-    let sound = sand::audio::Sound::load(sound_path).unwrap();
+    let o_handle = match OutputStream::try_default() {
+        Ok((stream, handle)) => {
+            mem::forget(stream);
+            Some(handle)
+        }
+        Err(_) => None
+    };
 
-    let state = DaemonCtx::new(Some(sound));
+    let state = DaemonCtx::new(o_handle);
     let std_listener: unix::net::UnixListener = unsafe { unix::net::UnixListener::from_raw_fd(fd) };
     std_listener.set_nonblocking(true)?;
     let listener: UnixListener = UnixListener::from_std(std_listener)?;
@@ -108,5 +114,5 @@ pub fn main(_args: cli::DaemonArgs) -> io::Result<()> {
     }
 
     let rt = Runtime::new()?;
-    rt.block_on(daemon(fd, o_sound_path))
+    rt.block_on(daemon(fd))
 }
