@@ -5,7 +5,7 @@ use tokio::task::JoinHandle;
 
 
 #[derive(PartialEq, Eq, Hash, Debug, Clone, Copy, Serialize, Deserialize)]
-pub struct TimerId(u64);
+pub struct TimerId(pub u64);
 
 impl Default for TimerId {
     fn default() -> Self {
@@ -22,6 +22,15 @@ impl Display for TimerId {
 impl TimerId {
     pub fn next(self) -> Self {
         Self(self.0 + 1)
+    }
+
+    pub fn parse_or_quit(timer_id: &str) -> Self {
+        u64::from_str_radix(&timer_id, 10)
+            .map(TimerId)
+            .unwrap_or_else(|e| {
+                eprintln!("Failed to parse timer id \"{timer_id}\": {e}");
+                std::process::exit(1)
+            })
     }
 }
 

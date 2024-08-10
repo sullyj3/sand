@@ -6,8 +6,11 @@ use std::time::Instant;
 use notify_rust::Notification;
 use rodio::OutputStreamHandle;
 use tokio::sync::Notify;
+use tokio::task::JoinHandle;
 
 use crate::sand::audio::ElapsedSoundPlayer;
+use crate::sand::message::PauseTimerResponse;
+use crate::sand::message;
 use crate::sand::timer::Timer;
 use crate::sand::timer::TimerId;
 use crate::sand::timer::TimerInfoForClient;
@@ -67,20 +70,60 @@ impl DaemonCtx {
         self.timers.elapse(id)
     }
 
-    pub fn add_timer(&self, now: Instant, duration: Duration) -> TimerId {
-        let id = self.new_timer_id();
-        let due = now + duration;
-
+    fn spawn_countdown(&self, id: TimerId, duration: Duration) -> (JoinHandle<()>, Arc<Notify>)  {
         // once the countdown has elapsed, it removes its associated timer from
         // the Timers map. For short durations (eg 0), We need to synchronize to
         // ensure it doesn't do this til after it's been added
         let notify_added = Arc::new(Notify::new());
         let rx_added = notify_added.clone();
-        let countdown = tokio::spawn(
+        let join_handle = tokio::spawn(
             self.clone().countdown(id, duration, rx_added)
         );
-        self.timers.add(id, Timer::Running { due, countdown });
+        (join_handle, notify_added)
+    }
+
+    pub fn add_timer(&self, now: Instant, duration: Duration) -> TimerId {
+        let id = self.new_timer_id();
+        let due = now + duration;
+
+        let (join_handle, notify_added) = self.spawn_countdown(id, duration);
+        self.timers.add(id, Timer::Running { due, countdown: join_handle });
         notify_added.notify_one();
         id
+    }
+
+    pub fn pause_timer(&self, id: TimerId, now: Instant) -> PauseTimerResponse {
+        use PauseTimerResponse as Resp;
+        use Timer as T;
+        
+        let dashmap::Entry::Occupied(mut entry) = self.timers.entry(id) else {
+            return Resp::TimerNotFound;
+        };
+        let timer = entry.get_mut();
+        let T::Running { due, countdown } = timer else {
+            return Resp::AlreadyPaused
+        };
+
+        countdown.abort();
+        *timer = T::Paused { remaining: *due - now };
+        Resp::Ok
+    }
+    
+    pub fn resume_timer(&self, id: TimerId, now: Instant) -> message::ResumeTimerResponse {
+        use message::ResumeTimerResponse as Resp;
+        use Timer as T;
+        
+        let dashmap::Entry::Occupied(mut entry) = self.timers.entry(id) else {
+            return Resp::TimerNotFound;
+        };
+        let timer = entry.get_mut();
+        let T::Paused { remaining } = timer else {
+            return Resp::AlreadyRunning
+        };
+
+        let (join_handle, notify_added) = self.spawn_countdown(id, *remaining);
+        *timer = T::Running { due: now + *remaining, countdown: join_handle };
+        notify_added.notify_one();
+        Resp::Ok
     }
 }

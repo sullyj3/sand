@@ -2,6 +2,7 @@
 use std::io::{self, BufRead, BufReader, LineWriter, Write};
 use std::path::PathBuf;
 use std::os::unix::net::UnixStream;
+use std::process::exit;
 use std::time::Duration;
 
 use dirs;
@@ -9,8 +10,9 @@ use serde::Deserialize;
 
 use crate::sand::cli::StartArgs;
 use crate::cli;
-use crate::sand::message::{AddTimerResponse, Command};
+use crate::sand::message::{AddTimerResponse, Command, PauseTimerResponse, ResumeTimerResponse};
 use crate::sand::duration::DurationExt;
+use crate::sand::timer::TimerId;
 
 fn get_sock_path() -> Option<PathBuf> {
     if let Ok(path) = std::env::var("SAND_SOCK_PATH") {
@@ -65,6 +67,9 @@ pub fn main(cmd: cli::CliCommand) -> io::Result<()> {
         },
     };
 
+    // TODO: make sure to parse Error Messages. we should prob move sending, 
+    // receiving, and parsing fully into DaemonConnection, and present
+    // Command -> Result<CmdResponse, Error> type api
     match cmd {
         cli::CliCommand::Start(StartArgs{ durations }) => {
             let dur: Duration = durations.iter().sum();
@@ -80,12 +85,41 @@ pub fn main(cmd: cli::CliCommand) -> io::Result<()> {
             todo!();
         }
         cli::CliCommand::Pause { timer_id } => {
-            println!("Pausing timer {}...", timer_id);
-            todo!();
+            let timer_id = TimerId::parse_or_quit(&timer_id);
+            conn.send(Command::PauseTimer(timer_id))?;
+            match conn.recv::<PauseTimerResponse>()? {
+                PauseTimerResponse::Ok => {
+                    println!("Paused timer {timer_id}.");
+                    Ok(())
+                },
+                PauseTimerResponse::TimerNotFound => {
+                    println!("Timer {timer_id} not found.");
+                    exit(1);
+                },
+                PauseTimerResponse::AlreadyPaused => {
+                    println!("Timer {timer_id} is already paused.");
+                    exit(1);
+                },
+            }
         }
         cli::CliCommand::Resume { timer_id } => {
-            println!("Resuming timer {}...", timer_id);
-            todo!();
+            let timer_id = TimerId::parse_or_quit(&timer_id);
+            conn.send(Command::ResumeTimer(timer_id))?;
+            use ResumeTimerResponse as Resp;
+            match conn.recv::<ResumeTimerResponse>()? {
+                Resp::Ok => {
+                    println!("Resumed timer {timer_id}.");
+                    Ok(())
+                },
+                Resp::TimerNotFound => {
+                    println!("Timer {timer_id} not found.");
+                    exit(1);
+                },
+                Resp::AlreadyRunning => {
+                    println!("Timer {timer_id} is already running.");
+                    exit(1);
+                },
+            }
         }
         cli::CliCommand::Cancel { timer_id } => {
             println!("Cancelling timer {}...", timer_id);

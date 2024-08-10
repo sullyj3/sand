@@ -15,6 +15,10 @@ impl Timers{
         }
     }
 
+    pub fn entry(&self, id: TimerId) -> Entry<TimerId, Timer> {
+        self.0.entry(id)
+    }
+
     pub fn get_timerinfo_for_client(&self, now: Instant) -> Vec<TimerInfoForClient> {
         self.0.iter().map(|ref_multi| {
             let (id, timer) = ref_multi.pair();

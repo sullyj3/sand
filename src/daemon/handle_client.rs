@@ -15,6 +15,7 @@ use crate::sand::message::ListResponse;
 use crate::sand::message::PauseTimerResponse;
 use crate::sand::message::ResumeTimerResponse;
 use crate::sand::message::{Command, Response};
+use crate::sand::timer::TimerId;
 
 use super::ctx::DaemonCtx;
 
@@ -40,15 +41,15 @@ impl CmdHandlerCtx {
         AddTimerResponse::ok(id)
     }
     
-    fn pause_timer(&self, _id: crate::sand::timer::TimerId) -> PauseTimerResponse {
-        todo!()
+    fn pause_timer(&self, id: TimerId) -> PauseTimerResponse {
+        self.state.pause_timer(id, self.now)
     }
     
-    fn resume_timer(&self, _id: crate::sand::timer::TimerId) -> ResumeTimerResponse {
-        todo!()
+    fn resume_timer(&self, id: TimerId) -> ResumeTimerResponse {
+        self.state.resume_timer(id, self.now)
     }
     
-    fn cancel_timer(&self, _id: crate::sand::timer::TimerId) -> CancelTimerResponse {
+    fn cancel_timer(&self, _id: TimerId) -> CancelTimerResponse {
         todo!()
     }
 }
