@@ -9,7 +9,7 @@ use serde::Deserialize;
 
 use crate::sand::cli::StartArgs;
 use crate::cli;
-use crate::sand::message::{AddTimerResponse, Command, ListResponse, PauseTimerResponse, ResumeTimerResponse};
+use crate::sand::message::{self, AddTimerResponse, Command, ListResponse, PauseTimerResponse, ResumeTimerResponse};
 use crate::sand::duration::DurationExt;
 use crate::sand::timer::{TimerId, TimerInfoForClient};
 
@@ -62,6 +62,11 @@ fn display_timer_info(timers: &[TimerInfoForClient]) -> String {
     }
 }
 
+fn exit_timer_not_found(id: TimerId) -> ! {
+    println!("Timer {id} not found.");
+    exit(1)
+}
+
 pub fn main(cmd: cli::CliCommand) -> io::Result<()> {
     let Some(sock_path) = get_sock_path() else {
         eprintln!("socket not provided and runtime directory does not exist.");
@@ -104,10 +109,7 @@ pub fn main(cmd: cli::CliCommand) -> io::Result<()> {
                     println!("Paused timer {timer_id}.");
                     Ok(())
                 },
-                PauseTimerResponse::TimerNotFound => {
-                    println!("Timer {timer_id} not found.");
-                    exit(1);
-                },
+                PauseTimerResponse::TimerNotFound => exit_timer_not_found(timer_id),
                 PauseTimerResponse::AlreadyPaused => {
                     println!("Timer {timer_id} is already paused.");
                     exit(1);
@@ -123,10 +125,7 @@ pub fn main(cmd: cli::CliCommand) -> io::Result<()> {
                     println!("Resumed timer {timer_id}.");
                     Ok(())
                 },
-                Resp::TimerNotFound => {
-                    println!("Timer {timer_id} not found.");
-                    exit(1);
-                },
+                Resp::TimerNotFound => exit_timer_not_found(timer_id),
                 Resp::AlreadyRunning => {
                     println!("Timer {timer_id} is already running.");
                     exit(1);
@@ -134,8 +133,16 @@ pub fn main(cmd: cli::CliCommand) -> io::Result<()> {
             }
         }
         cli::CliCommand::Cancel { timer_id } => {
-            println!("Cancelling timer {}...", timer_id);
-            todo!();
+            let timer_id = TimerId::parse_or_quit(&timer_id);
+            conn.send(Command::CancelTimer(timer_id))?;
+            use message::CancelTimerResponse as Resp;
+            match conn.recv::<Resp>()? {
+                Resp::Ok => {
+                    println!("Cancelled timer {timer_id}.");
+                    Ok(())
+                },
+                Resp::TimerNotFound => exit_timer_not_found(timer_id),
+            }
         }
         cli::CliCommand::Version => unreachable!("handled in top level main"),
         cli::CliCommand::Daemon(_) => unreachable!("handled in top level main"),

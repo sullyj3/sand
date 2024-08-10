@@ -126,4 +126,18 @@ impl DaemonCtx {
         notify_added.notify_one();
         Resp::Ok
     }
+    
+    pub fn cancel_timer(&self, id: TimerId) -> message::CancelTimerResponse {
+        use message::CancelTimerResponse as Resp;
+
+        let dashmap::Entry::Occupied(entry) = self.timers.entry(id) else {
+            return Resp::TimerNotFound;
+        };
+        let timer = entry.get();
+        if let Timer::Running { countdown, .. } = timer {
+            countdown.abort();
+        }
+        entry.remove();
+        Resp::Ok
+    }
 }
