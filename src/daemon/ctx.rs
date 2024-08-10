@@ -31,7 +31,7 @@ impl DaemonCtx {
     }
 
     pub fn new_timer_id(&self) -> TimerId {
-        let mut curr = self.next_id.lock().unwrap();
+        let mut curr = self.next_id.lock().expect("another thread panicked while holding this lock.");
         let id = *curr;
         *curr = curr.next();
         id
@@ -44,16 +44,22 @@ impl DaemonCtx {
     async fn countdown(self, id: TimerId, duration: Duration, rx_added: Arc<Notify>) {
         tokio::time::sleep(duration).await;
         eprintln!("Timer {id} completed");
-        Notification::new()
+
+        let notification = Notification::new()
             .summary("Time's up!")
             .body("Your timer has elapsed")
             .icon("alarm")
             .urgency(notify_rust::Urgency::Critical)
-            .show()
-            .unwrap();
+            .show();
+        if let Err(e) = notification {
+            eprintln!("Error showing desktop notification: {e}");
+        }
+            
         if let Some(ref player) = self.player {
             eprintln!("playing sound");
-            player.play().unwrap();
+            if let Err(e) = player.play() {
+                eprintln!("Error playing timer elapsed sound: {e}");
+            }
         } else {
             eprintln!("not playing sound");
         }

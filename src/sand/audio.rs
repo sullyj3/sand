@@ -41,7 +41,7 @@ impl Sound {
     }
 
     pub fn decoder(&self) -> rodio::Decoder<io::Cursor<Self>> {
-        rodio::Decoder::new(self.cursor()).unwrap()
+        rodio::Decoder::new(self.cursor()).expect("Failed to decode the sound")
     }
 
     pub fn play(&self, handle: &OutputStreamHandle) -> Result<(), rodio::PlayError> {
