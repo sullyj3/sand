@@ -3,6 +3,9 @@ name = "sand"
 version = "0.1.0"
 edition = "2021"
 
+[profile.release]
+strip = true
+
 [dependencies]
 async-scoped = { version = "0.9.0", features = ["use-tokio"] }
 clap = { version = "4.5.13", features = ["derive"] }
