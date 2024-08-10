@@ -1,4 +1,3 @@
-
 use std::io::{self, BufRead, BufReader, LineWriter, Write};
 use std::path::PathBuf;
 use std::os::unix::net::UnixStream;
@@ -10,9 +9,9 @@ use serde::Deserialize;
 
 use crate::sand::cli::StartArgs;
 use crate::cli;
-use crate::sand::message::{AddTimerResponse, Command, PauseTimerResponse, ResumeTimerResponse};
+use crate::sand::message::{AddTimerResponse, Command, ListResponse, PauseTimerResponse, ResumeTimerResponse};
 use crate::sand::duration::DurationExt;
-use crate::sand::timer::TimerId;
+use crate::sand::timer::{TimerId, TimerInfoForClient};
 
 fn get_sock_path() -> Option<PathBuf> {
     if let Ok(path) = std::env::var("SAND_SOCK_PATH") {
@@ -52,6 +51,17 @@ impl DaemonConnection {
     }
 }
 
+fn display_timer_info(timers: &[TimerInfoForClient]) -> String {
+    if timers.len() == 0 {
+        "No timers running.".into()
+    } else {
+        timers.iter()
+            .map(TimerInfoForClient::display)
+            .intersperse("\n".to_string())
+            .collect()
+    }
+}
+
 pub fn main(cmd: cli::CliCommand) -> io::Result<()> {
     let Some(sock_path) = get_sock_path() else {
         eprintln!("socket not provided and runtime directory does not exist.");
@@ -81,8 +91,10 @@ pub fn main(cmd: cli::CliCommand) -> io::Result<()> {
             Ok(())
         }
         cli::CliCommand::Ls => {
-            println!("Listing timers...");
-            todo!();
+            conn.send(Command::List)?;
+            let ListResponse::Ok {ref timers } = conn.recv::<ListResponse>()?;
+            println!("{}", display_timer_info(timers));
+            Ok(())
         }
         cli::CliCommand::Pause { timer_id } => {
             let timer_id = TimerId::parse_or_quit(&timer_id);

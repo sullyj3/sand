@@ -3,6 +3,8 @@ use std::{fmt::Display, time::{Duration, Instant}};
 use serde::{Deserialize, Serialize};
 use tokio::task::JoinHandle;
 
+use crate::sand::duration::DurationExt;
+
 
 #[derive(PartialEq, Eq, Hash, Debug, Clone, Copy, Serialize, Deserialize)]
 pub struct TimerId(pub u64);
@@ -41,7 +43,7 @@ pub enum Timer {
 }
 
 #[derive(Debug, PartialEq, Serialize, Deserialize)]
-pub enum TimerStateForClient {
+pub enum TimerState {
     Paused,
     Running,
 }
@@ -49,7 +51,7 @@ pub enum TimerStateForClient {
 #[derive(Debug, PartialEq, Serialize, Deserialize)]
 pub struct TimerInfoForClient {
     id: TimerId,
-    state: TimerStateForClient,
+    state: TimerState,
     remaining_millis: u64,
 }
 
@@ -58,10 +60,22 @@ impl TimerInfoForClient  {
     pub fn new(id: TimerId, timer: &Timer, now: Instant) -> Self {
         let (state, remaining_millis) = match timer {
             Timer::Paused { remaining } =>
-                (TimerStateForClient::Paused, remaining.as_millis() as u64),
+                (TimerState::Paused, remaining.as_millis() as u64),
             Timer::Running { due, .. } => 
-                (TimerStateForClient::Running, (*due - now).as_millis() as u64),
+                (TimerState::Running, (*due - now).as_millis() as u64),
         };
         Self { id, state, remaining_millis }
+    }
+
+
+    pub fn display(&self) -> String {
+        let remaining: String = Duration::from_millis(self.remaining_millis)
+            .format_colon_separated();
+        let id = self.id;
+        const PAUSED: &'static str = " (PAUSED)";
+        const NOT_PAUSED: &'static str = "";
+        let maybe_paused = 
+            if self.state == TimerState::Paused { PAUSED } else { NOT_PAUSED };
+        format!("{id} | {remaining}{maybe_paused}")
     }
 }

@@ -1,3 +1,5 @@
+#![feature(iter_intersperse)]
+
 use std::io;
 
 use clap::Parser;
