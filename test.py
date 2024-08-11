@@ -99,14 +99,14 @@ def run_client(sock_path, args):
     output = client_proc.stdout.read().decode('utf-8')
     return (status, output)
 
-@pytest.mark.skip()
 class TestClient:
     def test_list_none(self, daemon):
         (status, output) = run_client(SOCKET_PATH, ["list"])
         assert status == 0, f"Client exited with status {status}"
-        expected_stdout = "No running timers."
+        expected_stdout = "No timers running."
         assert output.strip() == expected_stdout
 
+    @pytest.mark.skip()
     def test_add(self, daemon):
         (status, output) = run_client(SOCKET_PATH, ["10m"])
         assert status == 0, f"Client exited with status {status}"
@@ -178,9 +178,8 @@ class TestDaemon:
         )
         assert not diff, f"Response shape mismatch:\n{pformat(diff)}"
 
-    @pytest.mark.skip()
     def test_pause_resume(self, daemon):
-        run_client(SOCKET_PATH, ["10m"])
+        run_client(SOCKET_PATH, ["start", "10m"])
         run_client(SOCKET_PATH, ["pause", "1"])
 
         response = msg_and_response('list')
@@ -188,8 +187,9 @@ class TestDaemon:
             'ok': {
                 'timers': [
                     {
-                        'id': {'id': 1},
-                        'state': {'paused': {'remaining': {'millis': 0}}}
+                        'id': 1,
+                        'state': 'Paused', 
+                        'remaining_millis': 0
                     }
                 ]
             }
@@ -197,7 +197,7 @@ class TestDaemon:
         diff = DeepDiff(
             expected_shape,
             response,
-            exclude_regex_paths=IGNORE_MILLIS,
+            exclude_regex_paths=IGNORE_REMAINING_MILLIS,
             ignore_order=True
         )
         assert not diff, f"Response shape mismatch:\n{pformat(diff)}"
@@ -209,8 +209,9 @@ class TestDaemon:
             'ok': {
                 'timers': [
                     {
-                        'id': {'id': 1},
-                        'state': {'running': {'due': {'millis': 0}}}
+                        'id': 1,
+                        'state': 'Running', 
+                        'remaining_millis': 0
                     }
                 ]
             }
@@ -218,7 +219,7 @@ class TestDaemon:
         diff = DeepDiff(
             expected_shape,
             response,
-            exclude_regex_paths=IGNORE_MILLIS,
+            exclude_regex_paths=IGNORE_REMAINING_MILLIS,
             ignore_order=True
         )
         assert not diff, f"Response shape mismatch:\n{pformat(diff)}"
