@@ -21,7 +21,12 @@ jobs:
       - name: Git describe
         id: ghd
         uses: proudust/gh-describe@v2
+      - run: |
+          export DEBIAN_FRONTEND=noninteractive 
+          sudo apt-get install libasound2-dev
       - uses: actions-rust-lang/setup-rust-toolchain@v1
+        with: 
+          toolchain: nightly
       - run: cargo build --release
       - name: Set up Python
         uses: actions/setup-python@v5
