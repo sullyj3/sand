@@ -106,9 +106,8 @@ class TestClient:
         expected_stdout = "No timers running."
         assert output.strip() == expected_stdout
 
-    @pytest.mark.skip()
     def test_add(self, daemon):
-        (status, output) = run_client(SOCKET_PATH, ["10m"])
+        (status, output) = run_client(SOCKET_PATH, ["start", "10m"])
         assert status == 0, f"Client exited with status {status}"
         expected_stdout = "Timer #1 created for 00:10:00:000."
         assert output.strip() == expected_stdout
@@ -224,9 +223,8 @@ class TestDaemon:
         )
         assert not diff, f"Response shape mismatch:\n{pformat(diff)}"
 
-    @pytest.mark.skip()
     def test_cancel(self, daemon):
-        run_client(SOCKET_PATH, ["10m"])
+        run_client(SOCKET_PATH, ["start", "10m"])
         run_client(SOCKET_PATH, ["cancel", "1"])
 
         response = msg_and_response('list')
