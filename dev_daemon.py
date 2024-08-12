@@ -47,7 +47,10 @@ def daemon(daemon_socket):
         daemon_proc = subprocess.Popen(
             [BINARY_PATH] + daemon_args,
             pass_fds=(sock_fd,),
-            env={"SAND_SOCKFD": str(sock_fd)},
+            env={
+                "SAND_SOCKFD": str(sock_fd),
+                "RUST_BACKTRACE": "1",
+            },
             stdout=subprocess.PIPE,
             stderr=subprocess.PIPE,
         )
