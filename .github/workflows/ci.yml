@@ -4,13 +4,13 @@ on:
   push:
     branches: [main]
   pull_request:
-    types: [ready_for_review]
     branches: [main]
   workflow_dispatch:
 
 jobs:
   build_and_test:
     runs-on: ubuntu-latest
+    if: github.event.pull_request.draft == false
     permissions:
       # needed for action-gh-release
       contents: write
@@ -21,34 +21,36 @@ jobs:
       - name: Git describe
         id: ghd
         uses: proudust/gh-describe@v2
-      - name: Run Lean Action
-        uses: leanprover/lean-action@v1
-        env:
-          GIT_DESCRIBE: ${{ steps.ghd.outputs.describe }}
-        with:
-          auto-config: "false"
-          use-mathlib-cache: "false"
-          build: "true"
-
+      - run: |
+          export DEBIAN_FRONTEND=noninteractive 
+          sudo apt-get install libasound2-dev
+      - uses: actions-rust-lang/setup-rust-toolchain@v1
+        with: 
+          toolchain: nightly
+      - run: cargo build --release
       - name: Set up Python
         uses: actions/setup-python@v5
         with:
           python-version: '3.x'
       - name: Run integration tests
+        env:
+          SAND_TEST_TARGET: release
         run: |
-          echo "Testing $(.lake/build/bin/sand version)"
+          echo "Testing $(target/release/sand version)"
           python -m pip install --upgrade pip
           pip install pytest
           pip install deepdiff
           pytest test.py
 
-      - name: Create release archive
-        env:
-          GIT_DESCRIBE: ${{ steps.ghd.outputs.describe }}
-        run: ./create_release_archive.sh
-        if: startsWith(github.ref, 'refs/tags/v')
-      - name: Release
-        uses: softprops/action-gh-release@v2
-        if: startsWith(github.ref, 'refs/tags/v')
-        with:
-          files: release/sand-*-x86_64-linux.tar.zst
+
+      # TODO, will need to cargo build --release
+      # - name: Create release archive
+      #   env:
+      #     GIT_DESCRIBE: ${{ steps.ghd.outputs.describe }}
+      #   run: ./create_release_archive.sh
+      #   if: startsWith(github.ref, 'refs/tags/v')
+      # - name: Release
+      #   uses: softprops/action-gh-release@v2
+      #   if: startsWith(github.ref, 'refs/tags/v')
+      #   with:
+      #     files: release/sand-*-x86_64-linux.tar.zst

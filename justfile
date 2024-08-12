@@ -1,2 +1,2 @@
 watch:
-	watchexec -w . lake build
+	watchexec -w . cargo build

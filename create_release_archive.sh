@@ -1,7 +1,9 @@
 set -e
 
-if [ ! -f .lake/build/bin/sand ]; then
-    echo 'Please build the project first with `lake build`'
+binpath="target/release/sand"
+
+if [ ! -f $binpath ]; then
+    echo 'Please build the project first with `cargo build --release`'
     exit 1
 fi
 
@@ -21,7 +23,7 @@ set -x
 
 mkdir -p "release/$dir"
 
-cp -f .lake/build/bin/sand release/$dir/
+cp -f $binpath release/$dir/
 cp -f resources/systemd/sand.service release/$dir/
 cp -f resources/systemd/sand.socket release/$dir/
 cp -f resources/timer_sound.opus release/$dir/
