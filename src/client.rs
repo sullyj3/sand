@@ -11,15 +11,8 @@ use crate::sand::cli::StartArgs;
 use crate::cli;
 use crate::sand::message::{self, AddTimerResponse, Command, ListResponse, PauseTimerResponse, ResumeTimerResponse};
 use crate::sand::duration::DurationExt;
+use crate::sand::socket;
 use crate::sand::timer::{TimerId, TimerInfoForClient};
-
-fn get_sock_path() -> Option<PathBuf> {
-    if let Ok(path) = std::env::var("SAND_SOCK_PATH") {
-        Some(path.into())
-    } else {
-        Some(dirs::runtime_dir()?.join("sand.sock"))
-    }
-}
 
 struct DaemonConnection {
     read: BufReader<UnixStream>,
@@ -68,7 +61,7 @@ fn exit_timer_not_found(id: TimerId) -> ! {
 }
 
 pub fn main(cmd: cli::CliCommand) -> io::Result<()> {
-    let Some(sock_path) = get_sock_path() else {
+    let Some(sock_path) = socket::get_sock_path() else {
         eprintln!("socket not provided and runtime directory does not exist.");
         eprintln!("no socket to use.");
         std::process::exit(1)
