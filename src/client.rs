@@ -4,7 +4,6 @@ use std::os::unix::net::UnixStream;
 use std::process::exit;
 use std::time::Duration;
 
-use dirs;
 use serde::Deserialize;
 
 use crate::sand::cli::StartArgs;

@@ -61,10 +61,19 @@ async fn accept_loop(listener: UnixListener, state: &DaemonCtx) {
     }
 }
 
+fn get_socket() -> io::Result<UnixListener> {
+    let fd = get_fd();
+
+    let std_listener: unix::net::UnixListener = unsafe {
+        unix::net::UnixListener::from_raw_fd(fd) 
+    };
+    std_listener.set_nonblocking(true)?;
+    UnixListener::from_std(std_listener)
+}
+
 async fn daemon() -> io::Result<()> {
     eprintln!("Starting sand daemon {}", sand::VERSION);
 
-    let fd = get_fd();
 
     let o_handle = match OutputStream::try_default() {
         Ok((stream, handle)) => {
@@ -75,9 +84,7 @@ async fn daemon() -> io::Result<()> {
     };
 
     let state = DaemonCtx::new(o_handle);
-    let std_listener: unix::net::UnixListener = unsafe { unix::net::UnixListener::from_raw_fd(fd) };
-    std_listener.set_nonblocking(true)?;
-    let listener: UnixListener = UnixListener::from_std(std_listener)?;
+    let listener: UnixListener = get_socket()?;
 
     eprintln!("daemon started.");
     TokioScope::scope_and_block(|scope| {
