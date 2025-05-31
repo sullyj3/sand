@@ -1,9 +1,15 @@
 use std::path::PathBuf;
 
+pub fn env_sock_path() -> Option<PathBuf> {
+    std::env::var("SAND_SOCK_PATH")
+        .map(Into::into)
+        .ok()
+}
+
+pub fn default_sock_path() -> Option<PathBuf> {
+    dirs::runtime_dir().map(|p| p.join("sand.sock"))
+}
+
 pub fn get_sock_path() -> Option<PathBuf> {
-    if let Ok(path) = std::env::var("SAND_SOCK_PATH") {
-        Some(path.into())
-    } else {
-        Some(dirs::runtime_dir()?.join("sand.sock"))
-    }
+    env_sock_path().or_else(default_sock_path)
 }
