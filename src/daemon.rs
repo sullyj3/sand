@@ -15,6 +15,7 @@ use tokio::runtime::Runtime;
 
 use crate::cli;
 use crate::sand;
+use crate::sand::socket::env_sock_path;
 use handle_client::handle_client;
 use ctx::DaemonCtx;
 
@@ -62,13 +63,19 @@ async fn accept_loop(listener: UnixListener, state: &DaemonCtx) {
 }
 
 fn get_socket() -> io::Result<UnixListener> {
-    let fd = get_fd();
-
-    let std_listener: unix::net::UnixListener = unsafe {
-        unix::net::UnixListener::from_raw_fd(fd) 
-    };
-    std_listener.set_nonblocking(true)?;
-    UnixListener::from_std(std_listener)
+    env_sock_path()
+        .inspect(|p| {
+            println!("debug: found path in SAND_SOCK_PATH: {:?}", p);
+        })
+        .map(UnixListener::bind)
+        .unwrap_or_else(|| {
+            let fd = get_fd();
+            let std_listener: unix::net::UnixListener = unsafe {
+                unix::net::UnixListener::from_raw_fd(fd) 
+            };
+            std_listener.set_nonblocking(true)?;
+            UnixListener::from_std(std_listener)
+    })
 }
 
 async fn daemon() -> io::Result<()> {
