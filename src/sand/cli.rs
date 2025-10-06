@@ -7,6 +7,8 @@ use crate::sand;
 #[derive(Args, Clone)]
 pub struct DaemonArgs {}
 
+// TODO: default to `Start` when no subcommand provided 
+// https://stackoverflow.com/a/79564853
 #[derive(Parser)]
 #[clap(
     name = "sand",
