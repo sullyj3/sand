@@ -4,7 +4,7 @@ use clap::{Args, Parser, Subcommand};
 
 use crate::sand;
 
-#[derive(Args)]
+#[derive(Args, Clone)]
 pub struct DaemonArgs {}
 
 #[derive(Parser)]
@@ -15,16 +15,22 @@ pub struct DaemonArgs {}
 )]
 pub struct Cli {
     #[clap(subcommand)]
-    pub command: CliCommand,
+    command: CliCommand,
 }
 
-#[derive(Args)]
+impl Cli {
+    pub fn command(&self) -> CliCommand {
+        self.command.clone()
+    }
+}
+
+#[derive(Args, Clone)]
 pub struct StartArgs {
     #[clap(name = "DURATION", value_parser = sand::duration::parse_duration_component, num_args = 1..)]
     pub durations: Vec<Duration>,
 }
 
-#[derive(Subcommand)]
+#[derive(Subcommand, Clone)]
 pub enum CliCommand {
     /// Start a new timer for the given duration
     Start(StartArgs),
