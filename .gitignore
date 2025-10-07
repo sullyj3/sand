@@ -5,3 +5,4 @@
 __pycache__/
 /target
 daemon_stderr.log
+dev.sock
