@@ -17,7 +17,7 @@ pub struct DaemonArgs {}
 )]
 pub struct Cli {
     #[clap(subcommand)]
-    command: CliCommand,
+    pub command: CliCommand,
 }
 
 impl Cli {
@@ -30,6 +30,18 @@ impl Cli {
 pub struct StartArgs {
     #[clap(name = "DURATION", value_parser = sand::duration::parse_duration_component, num_args = 1..)]
     pub durations: Vec<Duration>,
+}
+
+#[derive(Parser)]
+#[clap(
+    about = "Start timers when no subcommand is provided",
+    long_about = "Start one or more timers by specifying durations directly.\n\n\
+Examples:\n  sand 5m            Start a 5 minute timer\n  sand 1h 30m        Start a 1 hour 30 minute timer\n  sand 90            Start a 90 second timer (the 's' suffix is optional)\n\n\
+Durations accept suffixes: s (seconds), m (minutes), h (hours). You can omit the 's' when specifying seconds."
+)]
+pub struct CliDefault {
+    #[command(flatten)]
+    pub start: StartArgs,
 }
 
 #[derive(Subcommand, Clone)]

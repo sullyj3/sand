@@ -2,6 +2,9 @@
 
 '''
 Sand integration tests.
+
+TODO: provide dependencies
+currently just installing with `pacman -S python-pytest python-deepdiff`
 '''
 
 import time
