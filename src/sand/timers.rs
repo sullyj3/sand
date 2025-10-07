@@ -15,7 +15,7 @@ impl Timers{
         }
     }
 
-    pub fn entry(&self, id: TimerId) -> Entry<TimerId, Timer> {
+    pub fn entry(&self, id: TimerId) -> Entry<'_, TimerId, Timer> {
         self.0.entry(id)
     }
 
