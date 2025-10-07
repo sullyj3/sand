@@ -6,6 +6,8 @@ use std::mem;
 use std::os::fd::FromRawFd;
 use std::os::fd::RawFd;
 use std::os::unix;
+use std::os::unix::fs::FileTypeExt;
+use std::path::PathBuf;
 use async_scoped;
 use async_scoped::TokioScope;
 use rodio::OutputStream;
@@ -64,8 +66,28 @@ async fn accept_loop(listener: UnixListener, state: &DaemonCtx) {
 
 fn get_socket() -> io::Result<UnixListener> {
     env_sock_path()
-        .inspect(|p| {
-            println!("debug: found path in SAND_SOCK_PATH: {:?}", p);
+        .inspect(|path: &PathBuf| {
+            eprintln!("debug: found path in SAND_SOCK_PATH: {:?}", path);
+            if let Ok(meta) = std::fs::symlink_metadata(path) {
+                if meta.file_type().is_socket() {
+                    // safe to remove stale socket
+                    if let Err(e) = std::fs::remove_file(path) {
+                        eprintln!("warning: failed to remove existing socket {:?}: {}", path, e);
+                    } else {
+                        eprintln!("info: removed stale socket at {:?}", path);
+                    }
+                } else {
+                    eprintln!(
+                        "error: SAND_SOCK_PATH {:?} exists but is not a socket ",
+                        path,
+                    );
+                    eprintln!("  (type: {:?})", meta.file_type());
+                    eprintln!("  Refusing to overwrite — please remove or change SAND_SOCK_PATH.");
+                        
+                    std::process::exit(1);
+                }
+            }
+
         })
         .map(UnixListener::bind)
         .unwrap_or_else(|| {
