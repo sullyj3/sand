@@ -1,31 +1,40 @@
-# Maintainer: Your Name <your.email@example.com>
-pkgname=sand
-pkgver=0.1.0
+# Maintainer: James Sully <sullyj3@gmail.com>
+# Contributor: James Sully <sullyj3@gmail.com>
+pkgname=sand-timer-git
+pkgver=v0.2.0
 pkgrel=1
-pkgdesc="A brief description of your sand program"
+pkgdesc="Command line countdown timers that don't take up a terminal."
 arch=('x86_64')
 url="https://github.com/sullyj3/sand"
 license=('MIT')
+groups=()
 depends=('systemd' 'libnotify')
-source=("$url/releases/download/v$pkgver/$pkgname-v$pkgver-x86_linux.tar.zst")
-sha256sums=('2cfb85474a6b5debf8d279ce8336b46ed8b7452ed02b67417e1e6e566a7ab44f')
+makedepends=('git' 'rust' 'cargo')
+provides=("${pkgname%-git}")
+conflicts=("${pkgname%-git}")
+source=("${pkgname%-git}::git+https://github.com/sullyj3/sand.git")
+options=(!debug)
+sha256sums=('SKIP')
+
+pkgver() {
+	cd "$srcdir/${pkgname%-git}"
+	printf "%s" "$(git describe --long | sed 's/\([^-]*-\)g/r\1/;s/-/./g')"
+}
+
+build() {
+	cd "$srcdir/${pkgname%-git}"
+	cargo build --release
+}
 
 package() {
-    cd "${srcdir}/release"
-    
-    # Install the binary
-    install -Dm755 sand "${pkgdir}/usr/bin/sand"
-    
-    # Install documentation
+	cd "$srcdir/${pkgname%-git}"
+	install -Dm755 target/release/sand ${pkgdir}/usr/bin/sand
+
     install -Dm644 README.md "${pkgdir}/usr/share/doc/${pkgname}/README.md"
-    
-    # Install license
     install -Dm644 LICENSE "${pkgdir}/usr/share/licenses/${pkgname}/LICENSE"
-    
-    # Install systemd user services
+
     install -Dm644 resources/systemd/sand.socket "${pkgdir}/usr/lib/systemd/user/sand.socket"
     install -Dm644 resources/systemd/sand.service "${pkgdir}/usr/lib/systemd/user/sand.service"
-    
-    # Install additional resources
+
     install -Dm644 resources/timer_sound.opus "${pkgdir}/usr/share/${pkgname}/timer_sound.opus"
 }
