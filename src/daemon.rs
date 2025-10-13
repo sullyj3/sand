@@ -109,7 +109,11 @@ async fn daemon() -> io::Result<()> {
             mem::forget(stream);
             Some(handle)
         }
-        Err(_) => None
+        Err(e) => {
+            eprintln!("Warning: Failed to initialise OutputStream. There will be no timer sounds.");
+            eprintln!("{:?}", e);
+            None
+        }
     };
 
     let state = DaemonCtx::new(o_handle);

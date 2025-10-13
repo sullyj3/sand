@@ -81,10 +81,10 @@ pub struct ElapsedSoundPlayer {
 
 impl ElapsedSoundPlayer {
     pub fn new(handle: OutputStreamHandle) -> io::Result<Self> {
-        let sound = load_elapsed_sound()?;
-        Ok(Self {
-            sound,
-            handle,
+        load_elapsed_sound().inspect_err(|e| {
+            eprintln!("Warning: error loading the audio file: {}", e);
+        }).map(|sound| {
+            Self {sound, handle}
         })
     }
 

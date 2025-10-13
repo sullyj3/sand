@@ -25,7 +25,16 @@ pub struct DaemonCtx {
 
 impl DaemonCtx {
     pub fn new(stream_handle: Option<OutputStreamHandle>) -> Self {
-        let player = stream_handle.and_then(|handle| ElapsedSoundPlayer::new(handle).ok());
+        eprintln!("Debug: stream_handle is {}", if stream_handle.is_some() {"some"} else {"none"});
+        let player = stream_handle.and_then(|handle| {
+            let elapsed_sound_player = ElapsedSoundPlayer::new(handle);
+            eprintln!("Debug: elapsed_sound_player is {}", if elapsed_sound_player.is_ok() {"ok"} else {"err"});
+            if let Err(e) = &elapsed_sound_player {
+                eprintln!("{:?}", e);
+            }
+            elapsed_sound_player.ok()
+        });
+        eprintln!("Debug: player is {}", if player.is_some() {"some"} else {"none"});
         Self {
             timers: Default::default(),
             next_id: Arc::new(Mutex::new(Default::default())),
