@@ -29,8 +29,7 @@ impl Sound {
         // eliminated using unsafe.
         // It's not a big deal though
         let mut buf = Vec::with_capacity(1_000_000);
-        let mut file = File::open(path)?;
-        file.read_to_end(&mut buf)?;
+        File::open(path)?.read_to_end(&mut buf)?;
         Ok(Self {
             data: Arc::from(buf),
         })
