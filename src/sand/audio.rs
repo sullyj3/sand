@@ -49,6 +49,7 @@ impl Sound {
     }
 }
 
+// TODO weren't we using opus? look into which is better and whether opus is supported
 const SOUND_FILENAME: &str = "timer_sound.flac";
 
 fn xdg_sand_data_dir() -> Option<PathBuf> {
@@ -59,8 +60,15 @@ fn xdg_sound_path() -> Option<PathBuf> {
     Some(xdg_sand_data_dir()?.join(SOUND_FILENAME))
 }
 
-fn usrshare_sound_path() -> PathBuf {
-    Path::new("/usr/share/sand").join(SOUND_FILENAME)
+fn default_sound_path() -> PathBuf {
+    let base = if let Some("development") = option_env!("SAND_ENV") {
+        eprintln!("INFO: In development mode, loading sound relative to current working directory");
+        Path::new("./resources")
+    } else {
+        // TODO handle different package names
+        Path::new("/usr/share/sand")
+    };
+    base.join(SOUND_FILENAME)
 }
 
 fn load_elapsed_sound() -> io::Result<Sound> {
@@ -70,7 +78,7 @@ fn load_elapsed_sound() -> io::Result<Sound> {
             return sound;
         }
     }
-    Sound::load(usrshare_sound_path())
+    Sound::load(default_sound_path())
 }
 
 #[derive(Clone)]
