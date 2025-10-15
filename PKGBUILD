@@ -2,7 +2,7 @@
 # Contributor: James Sully <sullyj3@gmail.com>
 _pkgname=sand-timer
 pkgname=${_pkgname}-git
-pkgver=v0.2.0.r124.1d9398d
+pkgver=v0.2.0.r129.76a9e39
 pkgrel=1
 pkgdesc="Command line countdown timers that don't take up a terminal."
 arch=('x86_64')
@@ -37,5 +37,5 @@ package() {
     install -Dm644 resources/systemd/sand.socket "${pkgdir}/usr/lib/systemd/user/sand.socket"
     install -Dm644 resources/systemd/sand.service "${pkgdir}/usr/lib/systemd/user/sand.service"
 
-    install -Dm644 resources/timer_sound.opus "${pkgdir}/usr/share/${_pkgname}/timer_sound.opus"
+    install -Dm644 resources/timer_sound.flac "${pkgdir}/usr/share/${_pkgname}/timer_sound.flac"
 }
