@@ -7,6 +7,8 @@ use std::sync::Arc;
 use rodio::OutputStreamHandle;
 use rodio::Source;
 
+use crate::sand::PKGNAME;
+
 #[derive(Debug, Clone)]
 #[repr(transparent)]
 pub struct Sound {
@@ -53,7 +55,7 @@ impl Sound {
 const SOUND_FILENAME: &str = "timer_sound.flac";
 
 fn xdg_sand_data_dir() -> Option<PathBuf> {
-    Some(dirs::data_dir()?.join("sand"))
+    Some(dirs::data_dir()?.join(PKGNAME))
 }
 
 fn xdg_sound_path() -> Option<PathBuf> {
@@ -61,14 +63,14 @@ fn xdg_sound_path() -> Option<PathBuf> {
 }
 
 fn default_sound_path() -> PathBuf {
-    let base = if let Some("development") = option_env!("SAND_ENV") {
+    let mut path: PathBuf = if let Some("development") = option_env!("SAND_ENV") {
         eprintln!("INFO: In development mode, loading sound relative to current working directory");
-        Path::new("./resources")
+        PathBuf::from("./resources")
     } else {
-        // TODO handle different package names
-        Path::new("/usr/share/sand")
+        Path::new("/usr/share").join(PKGNAME)
     };
-    base.join(SOUND_FILENAME)
+    path.push(SOUND_FILENAME);
+    path
 }
 
 fn load_elapsed_sound() -> io::Result<Sound> {

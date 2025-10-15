@@ -7,3 +7,4 @@ pub mod timers;
 pub mod audio;
 
 pub const VERSION: &str = "Sand v0.3.0: rewrite it in Rust";
+pub const PKGNAME: &str = "sand-timer";
