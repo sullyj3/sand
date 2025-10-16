@@ -136,7 +136,6 @@ pub fn main(cmd: cli::CliCommand) -> io::Result<()> {
                 Resp::TimerNotFound => exit_timer_not_found(timer_id),
             }
         }
-        cli::CliCommand::Version => unreachable!("handled in top level main"),
         cli::CliCommand::Daemon(_) => unreachable!("handled in top level main"),
     }
 }

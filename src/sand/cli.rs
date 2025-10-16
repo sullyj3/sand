@@ -50,7 +50,6 @@ pub enum CliCommand {
     Cancel {
         timer_id: String,
     },
-    Version,
 
     /// Launch the daemon
     Daemon(DaemonArgs),

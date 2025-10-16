@@ -16,7 +16,6 @@ use tokio::net::UnixListener;
 use tokio::runtime::Runtime;
 
 use crate::cli;
-use crate::sand;
 use crate::sand::socket::env_sock_path;
 use handle_client::handle_client;
 use ctx::DaemonCtx;
@@ -109,7 +108,7 @@ async fn daemon() -> io::Result<()> {
     }
     log_builder.init();
 
-    log::info!("Starting sand daemon {}", sand::VERSION);
+    log::info!("Starting sand daemon v{}", env!("CARGO_PKG_VERSION"));
 
     let o_handle = match OutputStream::try_default() {
         Ok((stream, handle)) => {

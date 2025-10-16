@@ -14,10 +14,6 @@ fn main() -> io::Result<()> {
     let cli = cli::Cli::parse();
 
     match cli.command() {
-        CliCommand::Version => {
-            println!("{}", sand::VERSION);
-            Ok(())
-        }
         CliCommand::Daemon(args) => daemon::main(args),
         cmd => {
             client::main(cmd)
