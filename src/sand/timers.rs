@@ -1,7 +1,7 @@
 
 use std::time::Instant;
 
-use dashmap::{DashMap, Entry};
+use dashmap::{DashMap, Entry, VacantEntry};
 
 use crate::sand::timer::*;
 
@@ -9,12 +9,6 @@ use crate::sand::timer::*;
 pub struct Timers(DashMap<TimerId, Timer>);
 
 impl Timers{
-    pub fn add(&self, id: TimerId, timer: Timer) {
-        if let Some(t) = self.0.insert(id, timer) {
-            unreachable!("BUG: adding timer with id #{id:?} clobbered pre-existing timer {t:?}");
-        }
-    }
-
     pub fn entry(&self, id: TimerId) -> Entry<'_, TimerId, Timer> {
         self.0.entry(id)
     }
@@ -33,11 +27,13 @@ impl Timers{
         occ.remove();
     }
 
-    pub fn minimum_available_id(&self) -> TimerId {
-        let mut i = 1;
-        while self.0.contains_key(&TimerId(i)) {
-            i += 1;
+    pub fn first_vacant_entry(&self) -> VacantEntry<'_, TimerId, Timer> {
+        let mut id = 1;
+        loop {
+            match self.0.entry(TimerId(id)) {
+                Entry::Occupied(_) => id += 1,
+                Entry::Vacant(vacant_entry) => break vacant_entry,
+            }
         }
-        TimerId(i)
     }
 }

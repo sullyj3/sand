@@ -47,10 +47,6 @@ impl DaemonCtx {
         }
     }
 
-    pub fn new_timer_id(&self) -> TimerId {
-        self.timers.minimum_available_id()
-    }
-
     pub fn get_timerinfo_for_client(&self, now: Instant) -> Vec<TimerInfoForClient> {
         self.timers.get_timerinfo_for_client(now)
     }
@@ -94,11 +90,11 @@ impl DaemonCtx {
     }
 
     pub fn add_timer(&self, now: Instant, duration: Duration) -> TimerId {
-        let id = self.new_timer_id();
-        let due = now + duration;
+        let vacant = self.timers.first_vacant_entry();
+        let id = *vacant.key();
 
         let (join_handle, notify_added) = self.spawn_countdown(id, duration);
-        self.timers.add(id, Timer::Running { due, countdown: join_handle });
+        vacant.insert(Timer::Running { due: now + duration, countdown: join_handle });
         notify_added.notify_one();
         id
     }
