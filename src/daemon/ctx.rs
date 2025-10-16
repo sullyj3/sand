@@ -25,16 +25,24 @@ pub struct DaemonCtx {
 
 impl DaemonCtx {
     pub fn new(stream_handle: Option<OutputStreamHandle>) -> Self {
-        eprintln!("Debug: stream_handle is {}", if stream_handle.is_some() {"some"} else {"none"});
+        log::trace!("stream_handle is {}", if stream_handle.is_some() {"some"} else {"none"});
         let player = stream_handle.and_then(|handle| {
             let elapsed_sound_player = ElapsedSoundPlayer::new(handle);
-            eprintln!("Debug: elapsed_sound_player is {}", if elapsed_sound_player.is_ok() {"ok"} else {"err"});
+            log::trace!(
+                "elapsed_sound_player is {}",
+                if elapsed_sound_player.is_ok() {"ok"} else {"err"});
             if let Err(e) = &elapsed_sound_player {
-                eprintln!("{:?}", e);
+                log::debug!("{:?}", e);
             }
             elapsed_sound_player.ok()
         });
-        eprintln!("Debug: player is {}", if player.is_some() {"some"} else {"none"});
+        log::trace!("player is {}", if player.is_some() {"some"} else {"none"});
+        match player {
+            Some(_) => log::debug!("ElapsedSoundPlayer successfully initialized."),
+            None => log::warn!(
+                "Failed to initialize elapsed sound player.\n\
+                 There will be no timer sounds."),
+        }
         Self {
             timers: Default::default(),
             next_id: Arc::new(Mutex::new(Default::default())),
@@ -55,7 +63,7 @@ impl DaemonCtx {
 
     async fn countdown(self, id: TimerId, duration: Duration, rx_added: Arc<Notify>) {
         tokio::time::sleep(duration).await;
-        eprintln!("Timer {id} completed");
+        log::info!("Timer {id} completed");
 
         let notification = Notification::new()
             .summary("Time's up!")
@@ -64,16 +72,16 @@ impl DaemonCtx {
             .urgency(notify_rust::Urgency::Critical)
             .show();
         if let Err(e) = notification {
-            eprintln!("Error showing desktop notification: {e}");
+            log::error!("Error showing desktop notification: {e}");
         }
             
         if let Some(ref player) = self.player {
-            eprintln!("playing sound");
+            log::debug!("playing sound");
             if let Err(e) = player.play() {
-                eprintln!("Error playing timer elapsed sound: {e}");
+                log::error!("Error playing timer elapsed sound: {e}");
             }
         } else {
-            eprintln!("not playing sound");
+            log::debug!("DaemonCtx.play is None - not playing sound");
         }
         rx_added.notified().await;
         self.timers.elapse(id)

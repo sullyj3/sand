@@ -68,7 +68,7 @@ fn handle_command(cmd: Command, state: &DaemonCtx) -> Response {
 
 
 pub async fn handle_client(mut stream: UnixStream, state: DaemonCtx) {
-    eprintln!("DEBUG: handling client.");
+    log::debug!("Handling client.");
 
     let (read_half, mut write_half) = stream.split();
 
@@ -80,7 +80,7 @@ pub async fn handle_client(mut stream: UnixStream, state: DaemonCtx) {
         let line: String = match rline {
             Ok(line) => line,
             Err(e) => {
-                eprintln!("Error reading line from client: {e}");
+                log::error!("Error reading line from client: {e}");
                 continue;
             },
         };
@@ -90,8 +90,8 @@ pub async fn handle_client(mut stream: UnixStream, state: DaemonCtx) {
         let resp: Response = match rcmd {
             Ok(cmd) => handle_command(cmd, &state),
             Err(e) => {
-                let err_msg: String = format!("Error: failed to parse client message as Command: {e}"); 
-                eprintln!("{err_msg}");
+                let err_msg: String = format!("Failed to parse client message as Command: {e}"); 
+                log::error!("{err_msg}");
                 Response::Error(err_msg)
             }
         };
@@ -100,5 +100,5 @@ pub async fn handle_client(mut stream: UnixStream, state: DaemonCtx) {
         write_half.write_all(resp_str.as_bytes()).await.unwrap();
     }
 
-    eprintln!("Client disconnected");
+    log::debug!("Client disconnected");
 }

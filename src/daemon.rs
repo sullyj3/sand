@@ -35,11 +35,11 @@ fn env_fd() -> Option<u32> {
 fn get_fd() -> RawFd {
     match env_fd() {
         None => {
-            eprintln!("SAND_SOCKFD not found, falling back on default.");
+            log::debug!("SAND_SOCKFD not found, falling back on default.");
             SYSTEMD_SOCKFD
         }
         Some(fd) => {
-            eprintln!("Found SAND_SOCKFD.");
+            log::debug!("Found SAND_SOCKFD.");
             fd.try_into()
                 .expect("Error: SAND_SOCKFD is too large to be a file descriptor.")
         }
@@ -47,17 +47,17 @@ fn get_fd() -> RawFd {
 }
 
 async fn accept_loop(listener: UnixListener, state: &DaemonCtx) {
-    eprintln!("starting accept loop");
+    log::info!("Starting accept loop");
     loop {
         match listener.accept().await {
             Ok((stream, _addr)) => {
-                eprintln!("got client");
+                log::trace!("Got client");
 
                 // Todo can we get rid of this clone? maybe if we use scoped threads?
                 let _jh = tokio::spawn(handle_client(stream, state.clone()));
             }
             Err(e) => {
-                eprintln!("Error: failed to accept client: {}", e);
+                log::error!("Failed to accept client: {}", e);
                 continue;
             }
         };
@@ -67,22 +67,21 @@ async fn accept_loop(listener: UnixListener, state: &DaemonCtx) {
 fn get_socket() -> io::Result<UnixListener> {
     env_sock_path()
         .inspect(|path: &PathBuf| {
-            eprintln!("debug: found path in SAND_SOCK_PATH: {:?}", path);
+            log::trace!("found path in SAND_SOCK_PATH: {:?}", path);
             if let Ok(meta) = std::fs::symlink_metadata(path) {
                 if meta.file_type().is_socket() {
                     // safe to remove stale socket
                     if let Err(e) = std::fs::remove_file(path) {
-                        eprintln!("warning: failed to remove existing socket {:?}: {}", path, e);
+                        log::error!("Failed to remove existing socket {:?}: {}", path, e);
                     } else {
-                        eprintln!("info: removed stale socket at {:?}", path);
+                        log::debug!("Removed stale socket at {:?}", path);
                     }
                 } else {
-                    eprintln!(
-                        "error: SAND_SOCK_PATH {:?} exists but is not a socket ",
-                        path,
-                    );
-                    eprintln!("  (type: {:?})", meta.file_type());
-                    eprintln!("  Refusing to overwrite — please remove or change SAND_SOCK_PATH.");
+                    log::error!(
+                        "SAND_SOCK_PATH {:?} exists but is not a socket.\n\
+                         (type: {:?})\n\
+                         Refusing to overwrite — please remove or change SAND_SOCK_PATH."
+                        , path, meta.file_type());
                         
                     std::process::exit(1);
                 }
@@ -101,8 +100,16 @@ fn get_socket() -> io::Result<UnixListener> {
 }
 
 async fn daemon() -> io::Result<()> {
-    eprintln!("Starting sand daemon {}", sand::VERSION);
+    let mut log_builder = colog::default_builder();
+    
+    if std::env::var("RUST_LOG").is_err() {
+        if let Some("development") = option_env!("SAND_ENV") {
+            log_builder.filter_level(log::LevelFilter::Debug);
+        };
+    }
+    log_builder.init();
 
+    log::info!("Starting sand daemon {}", sand::VERSION);
 
     let o_handle = match OutputStream::try_default() {
         Ok((stream, handle)) => {
@@ -110,8 +117,7 @@ async fn daemon() -> io::Result<()> {
             Some(handle)
         }
         Err(e) => {
-            eprintln!("Warning: Failed to initialise OutputStream. There will be no timer sounds.");
-            eprintln!("{:?}", e);
+            log::debug!("Failed to initialise OutputStream:\n{:?}", e);
             None
         }
     };
@@ -119,7 +125,7 @@ async fn daemon() -> io::Result<()> {
     let state = DaemonCtx::new(o_handle);
     let listener: UnixListener = get_socket()?;
 
-    eprintln!("daemon started.");
+    log::info!("Daemon started.");
     TokioScope::scope_and_block(|scope| {
         scope.spawn(accept_loop(listener, &state));
     });

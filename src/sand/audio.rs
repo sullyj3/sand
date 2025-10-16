@@ -64,7 +64,7 @@ fn xdg_sound_path() -> Option<PathBuf> {
 
 fn default_sound_path() -> PathBuf {
     let mut path: PathBuf = if let Some("development") = option_env!("SAND_ENV") {
-        eprintln!("INFO: In development mode, loading sound relative to current working directory");
+        log::info!("In development mode, loading sound relative to current working directory");
         PathBuf::from("./resources")
     } else {
         Path::new("/usr/share").join(PKGNAME)
@@ -92,7 +92,7 @@ pub struct ElapsedSoundPlayer {
 impl ElapsedSoundPlayer {
     pub fn new(handle: OutputStreamHandle) -> io::Result<Self> {
         load_elapsed_sound().inspect_err(|e| {
-            eprintln!("Warning: error loading the audio file: {}", e);
+            log::warn!("Error loading the audio file: {}", e);
         }).map(|sound| {
             Self {sound, handle}
         })
