@@ -141,8 +141,9 @@ impl DaemonCtx {
             return Resp::TimerNotFound;
         };
         let timer = entry.get();
-        if let Timer::Running { countdown, .. } = timer {
-            countdown.abort();
+        match timer {
+            Timer::Paused { remaining: _ } => {},
+            Timer::Running { due: _, countdown } => countdown.abort(),
         }
         entry.remove();
         Resp::Ok
