@@ -41,16 +41,3 @@ jobs:
           pip install pytest
           pip install deepdiff
           pytest test.py
-
-
-      # TODO, will need to cargo build --release
-      # - name: Create release archive
-      #   env:
-      #     GIT_DESCRIBE: ${{ steps.ghd.outputs.describe }}
-      #   run: ./create_release_archive.sh
-      #   if: startsWith(github.ref, 'refs/tags/v')
-      # - name: Release
-      #   uses: softprops/action-gh-release@v2
-      #   if: startsWith(github.ref, 'refs/tags/v')
-      #   with:
-      #     files: release/sand-*-x86_64-linux.tar.zst
