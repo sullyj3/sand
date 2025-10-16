@@ -9,13 +9,13 @@ pub struct DaemonArgs {}
 
 // TODO: make default command configurable. consult jj source
 #[derive(Parser)]
-#[clap(
+#[command(
     name = "sand",
     about = "Command line countdown timers that don't take up a terminal.",
     version
 )]
 pub struct Cli {
-    #[clap(subcommand)]
+    #[command(subcommand)]
     command: CliCommand,
 }
 
