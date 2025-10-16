@@ -28,12 +28,11 @@ impl Timers{
     }
 
     pub fn first_vacant_entry(&self) -> VacantEntry<'_, TimerId, Timer> {
-        let mut id = 1;
-        loop {
+        (1..).find_map(|id| {
             match self.0.entry(TimerId(id)) {
-                Entry::Occupied(_) => id += 1,
-                Entry::Vacant(vacant_entry) => break vacant_entry,
+                Entry::Occupied(_) => None,
+                Entry::Vacant(vacant_entry) => Some(vacant_entry),
             }
-        }
+        }).unwrap()
     }
 }
