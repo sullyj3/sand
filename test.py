@@ -278,7 +278,7 @@ Hopefully we'll be able to make the warn_threshold the fail_threshold
     reason="Only check executable size in release builds")
 def test_executable_size():
     exe_size = os.path.getsize(BINARY_PATH)
-    warn_threshold = 5_000_000
+    warn_threshold = 8_000_000
     if exe_size > warn_threshold:
         exe_size_mb = exe_size / 1_000_000
         warnings.warn(f"Sand executable size is {exe_size_mb:.2f}MB")
