@@ -1,5 +1,4 @@
 use std::sync::Arc;
-use std::sync::Mutex;
 use std::time::Duration;
 use std::time::Instant;
 
@@ -18,7 +17,6 @@ use crate::sand::timers::Timers;
 
 #[derive(Clone)]
 pub struct DaemonCtx {
-    next_id: Arc<Mutex<TimerId>>,
     timers: Arc<Timers>,
     player: Option<ElapsedSoundPlayer>,
 }
@@ -45,16 +43,12 @@ impl DaemonCtx {
         }
         Self {
             timers: Default::default(),
-            next_id: Arc::new(Mutex::new(Default::default())),
             player,
         }
     }
 
     pub fn new_timer_id(&self) -> TimerId {
-        let mut curr = self.next_id.lock().expect("another thread panicked while holding this lock.");
-        let id = *curr;
-        *curr = curr.next();
-        id
+        self.timers.minimum_available_id()
     }
 
     pub fn get_timerinfo_for_client(&self, now: Instant) -> Vec<TimerInfoForClient> {

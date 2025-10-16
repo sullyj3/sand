@@ -32,4 +32,12 @@ impl Timers{
         };
         occ.remove();
     }
+
+    pub fn minimum_available_id(&self) -> TimerId {
+        let mut i = 1;
+        while self.0.contains_key(&TimerId(i)) {
+            i += 1;
+        }
+        TimerId(i)
+    }
 }

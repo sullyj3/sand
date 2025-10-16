@@ -22,10 +22,6 @@ impl Display for TimerId {
 }
 
 impl TimerId {
-    pub fn next(self) -> Self {
-        Self(self.0 + 1)
-    }
-
     // TODO this should return the result and quitting should be in the client
     pub fn parse_or_quit(timer_id: &str) -> Self {
         u64::from_str_radix(&timer_id, 10)
