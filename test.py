@@ -235,7 +235,40 @@ class TestDaemon:
             ignore_order=True
         )
         assert not diff, f"Response shape mismatch:\n{pformat(diff)}"
+    
+    def test_cancel_paused(self, daemon):
+        run_client(SOCKET_PATH, ["start", "10m"])
+        run_client(SOCKET_PATH, ["pause", "1"])
 
+        response = msg_and_response('list')
+        expected_shape = { 'ok': { 
+                'timers': [
+                    {
+                        'id': 1,
+                        'state': 'Paused', 
+                        'remaining_millis': 0
+                    }
+                ]
+            }
+        }
+        diff = DeepDiff(
+            expected_shape,
+            response,
+            exclude_regex_paths=IGNORE_REMAINING_MILLIS,
+            ignore_order=True
+        )
+        assert not diff, f"Response shape mismatch:\n{pformat(diff)}"
+
+        run_client(SOCKET_PATH, ["cancel", "1"])
+
+        response = msg_and_response('list')
+        expected_shape = { 'ok': { 'timers': [] } }
+        diff = DeepDiff(
+            expected_shape,
+            response,
+            ignore_order=True
+        )
+        assert not diff, f"Response shape mismatch:\n{pformat(diff)}"
 '''
 Need to get this down. I think by eliminating any `import Lean`.
 Hopefully we'll be able to make the warn_threshold the fail_threshold
