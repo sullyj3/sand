@@ -27,9 +27,6 @@ impl Sound {
         P: AsRef<Path>,
     {
         use std::fs::File;
-        // the intermediate vec and copy from vec to arc can probably be 
-        // eliminated using unsafe.
-        // It's not a big deal though
         let mut buf = Vec::with_capacity(1_000_000);
         File::open(path)?.read_to_end(&mut buf)?;
         Ok(Self {
