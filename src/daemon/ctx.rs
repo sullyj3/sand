@@ -15,6 +15,7 @@ use crate::sand::timer::TimerId;
 use crate::sand::timer::TimerInfoForClient;
 use crate::sand::timers::Timers;
 
+/// Should be cheap to clone.
 #[derive(Clone)]
 pub struct DaemonCtx {
     timers: Arc<Timers>,
@@ -73,14 +74,28 @@ impl DaemonCtx {
         } else {
             log::debug!("DaemonCtx.play is None - not playing sound");
         }
+        // Since the countdown is started concurrently with adding the timer to
+        // the map, we need to ensure that it has been added before we remove 
+        // it, in case the duration of the countdown is short or 0.
         rx_added.notified().await;
         self.timers.elapse(id)
     }
 
     fn spawn_countdown(&self, id: TimerId, duration: Duration) -> (JoinHandle<()>, Arc<Notify>)  {
-        // once the countdown has elapsed, it removes its associated timer from
-        // the Timers map. For short durations (eg 0), We need to synchronize to
-        // ensure it doesn't do this til after it's been added
+        // Once the countdown has elapsed, it removes its associated `Timer` 
+        // from the Timers map by calling `timers.elapse(id)`. For short 
+        // durations (eg 0), We need to synchronize to ensure it doesn't do 
+        // this til after it's been added. This is what `notify_added` is for.
+
+        // I'm not thrilled with the `Notify` based solution, it feels a little
+        // awkward. I'm not sure whether there's a better way.
+
+        // Possibly we could have the countdown notify some central thread that
+        // it's done through a chan. Then the central thread could instead be
+        // responsible for doing the notification, playing the sound and removing
+        // the elapsed timer from the map. It's not obvious to me whether that 
+        // would be simpler. The central thread would still have to somehow 
+        // wait for the timer to be added before removing it.
         let notify_added = Arc::new(Notify::new());
         let rx_added = notify_added.clone();
         let join_handle = tokio::spawn(
