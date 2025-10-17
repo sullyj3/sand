@@ -34,7 +34,7 @@ fn env_fd() -> Option<u32> {
 fn get_fd() -> RawFd {
     match env_fd() {
         None => {
-            log::debug!("SAND_SOCKFD not found, falling back on default.");
+            log::debug!("SAND_SOCKFD not found, falling back the default systemd socket file descriptor (3).");
             SYSTEMD_SOCKFD
         }
         Some(fd) => {
