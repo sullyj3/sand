@@ -81,6 +81,13 @@ fn load_elapsed_sound() -> io::Result<Sound> {
     Sound::load(default_sound_path())
 }
 
+// TODO: Does ElapsedSoundPlayer really need to be Clone? Does it belong in the DaemonCtx?
+// maybe no if we switch to a single audio thread that reads timer elapsed 
+// events from a channel
+
+// Trying to update rodio 0.20 -> 0.21, OutputStreamHandle no longer exists,
+// and OutputStream isn't Clone. Maybe could just stick it in an Arc<Mutex<>>?
+// not sure
 #[derive(Clone)]
 pub struct ElapsedSoundPlayer {
     sound: Sound,
