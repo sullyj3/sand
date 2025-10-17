@@ -69,7 +69,7 @@ be able to use it on most distros. Please let me know if you do so I can update 
         - on Arch: alsa-lib
         - on Debian/Ubuntu: libasound2-dev
         - on Fedora: alsa-lib-devel
-2. `SAND_ENV=release cargo build --release
+2. `cargo build --release`
 3. `install -m755 target/release/sand /usr/bin/sand`
 3. Copy the systemd units from `resources/systemd/` into `/usr/lib/systemd/user/`
 4. Copy `resources/timer_sound.flac` units into `/usr/share/sand-timer/`

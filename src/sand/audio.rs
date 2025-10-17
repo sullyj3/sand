@@ -60,10 +60,11 @@ fn xdg_sound_path() -> Option<PathBuf> {
 }
 
 fn default_sound_path() -> PathBuf {
-    let mut path: PathBuf = if let Some("development") = option_env!("SAND_ENV") {
-        log::info!("In development mode, loading sound relative to current working directory");
+    let mut path: PathBuf = if cfg!(debug_assertions) {
+        log::info!("target is debug, loading sound relative to current working directory");
         PathBuf::from("./resources")
     } else {
+        log::trace!("target is release, loading sound from /usr/share");
         Path::new("/usr/share").join(PKGNAME)
     };
     path.push(SOUND_FILENAME);

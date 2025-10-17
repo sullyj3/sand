@@ -100,9 +100,8 @@ fn get_socket() -> io::Result<UnixListener> {
 
 async fn daemon() -> io::Result<()> {
     let mut log_builder = colog::default_builder();
-    
     if std::env::var("RUST_LOG").is_err() {
-        if let Some("development") = option_env!("SAND_ENV") {
+        if cfg!(debug_assertions) {
             log_builder.filter_level(log::LevelFilter::Debug);
         };
     }
