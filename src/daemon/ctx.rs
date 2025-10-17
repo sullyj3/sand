@@ -8,7 +8,6 @@ use tokio::sync::Notify;
 use tokio::task::JoinHandle;
 
 use crate::sand::audio::ElapsedSoundPlayer;
-use crate::sand::message::PauseTimerResponse;
 use crate::sand::message;
 use crate::sand::timer::Timer;
 use crate::sand::timer::TimerId;
@@ -114,39 +113,43 @@ impl DaemonCtx {
         id
     }
 
-    pub fn pause_timer(&self, id: TimerId, now: Instant) -> PauseTimerResponse {
-        use PauseTimerResponse as Resp;
-        use Timer as T;
+    pub fn pause_timer(&self, id: TimerId, now: Instant) -> message::PauseTimerResponse {
+        use message::PauseTimerResponse as Resp;
         
         let dashmap::Entry::Occupied(mut entry) = self.timers.entry(id) else {
             return Resp::TimerNotFound;
         };
         let timer = entry.get_mut();
-        let T::Running { due, countdown } = timer else {
-            return Resp::AlreadyPaused
-        };
 
-        countdown.abort();
-        *timer = T::Paused { remaining: *due - now };
-        Resp::Ok
+        use Timer as T;
+        match timer {
+            T::Running { due, countdown } => {
+                countdown.abort();
+                *timer = T::Paused { remaining: *due - now };
+                Resp::Ok
+            },
+            T::Paused { remaining: _ } => Resp::AlreadyPaused,
+        }
     }
     
     pub fn resume_timer(&self, id: TimerId, now: Instant) -> message::ResumeTimerResponse {
         use message::ResumeTimerResponse as Resp;
-        use Timer as T;
-        
+
         let dashmap::Entry::Occupied(mut entry) = self.timers.entry(id) else {
             return Resp::TimerNotFound;
         };
         let timer = entry.get_mut();
-        let T::Paused { remaining } = timer else {
-            return Resp::AlreadyRunning
-        };
 
-        let (join_handle, notify_added) = self.spawn_countdown(id, *remaining);
-        *timer = T::Running { due: now + *remaining, countdown: join_handle };
-        notify_added.notify_one();
-        Resp::Ok
+        use Timer as T;
+        match timer {
+            T::Paused { remaining } => {
+                let (join_handle, notify_added) = self.spawn_countdown(id, *remaining);
+                *timer = T::Running { due: now + *remaining, countdown: join_handle };
+                notify_added.notify_one();
+                Resp::Ok
+            },
+            T::Running { due: _, countdown: _ } => Resp::AlreadyRunning,
+        }
     }
     
     pub fn cancel_timer(&self, id: TimerId) -> message::CancelTimerResponse {
