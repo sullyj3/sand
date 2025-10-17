@@ -1,38 +1,78 @@
 # Sand
 
-Command line countdown timers that don't take up a terminal.
-
-`sand` runs as a daemon in the background, allowing you to set timers
-without having to worry about keeping the terminal open. You can also start 
-timers from your app launcher/command runner of choice.
+`sand` is a linux daemon for countdown timers, and a command-line client for 
+interacting with it.
 
 ```console
-$ sand 5m
-Timer created for 00:05:00:000.
-$ sand 1h 30s
-Timer created for 01:00:30:000.
+$ sand start 5m
+Timer #1 created for 00:05:00:000.
+
+$ sand start 1h 30s
+Timer #2 created for 01:00:30:000.
+
 $ sand ls
-#2 | 01:00:27:313 remaining
-#1 | 00:04:51:340 remaining
+#1 | 00:04:23:929
+#2 | 01:00:20:407
+
+$ sand cancel 1
+Cancelled timer #1.
+
+$ sand cancel 2
+Cancelled timer #2.
+
+$ sand ls
+No timers running.
 ```
 A sound will play and a desktop notification will be triggered when a timer 
 elapses.
 
-I use it for remembering to get things out of the oven.
+### Why not use your phone?
+
+- I'm generally on my laptop more than my phone. 
+- I find it much faster and more convenient to hit super+enter to open a 
+  terminal and type a short command than to unlock my phone, navigate to the 
+  clock app, and enter the duration on the touchscreen.
+
+### Why not use something like `sleep 600 && mpv elapsed.flac`?
+
+Basically, a bunch of minor useability improvements.
+
+- `sand start 10m` is less typing
+- If you're anything like me, you dislike having a bunch of open windows 
+  cluttering your workspace, making it difficult to find things. Since sand 
+  runs as a daemon, you can start a timer from a terminal, immediately close
+  the terminal, and the timer will still be running in the background. 
+  Alternatively, you can use your favorite graphical laucher or command runner.
+- You get a convenient syntax for minutes and hours, so that you don't have to
+  multiply by 60 or 3600 in your head to figure out how many seconds you need.
+- You get the ability to see how much time is remaining. Important feature IMO!
+
+If you're an ultra-minimalist who prefers cobbling solutions together using 
+tools that come stock with your distro, this might not be for you. If you like
+convenience and good UX, this is for you.
 
 ## Installation
+
+### Arch
+
+You can install using the `PKGBUILD` for `sand-timer-git` in the root directory.
+
+### Build and install from source
+
+Note that sand is untested on distros other than arch, but I believe you should
+be able to use it on most distros. Please let me know if you do so I can update this readme!
 
 1. Make sure you have the dependencies: 
     - systemd
     - libnotify
-    - optionally, pulseaudio or wireplumber (for timer notification sounds)
-
-2. Download and extract the latest tarball from the releases page
-3. The install script, `install_release.sh` is currently only tested on Arch.
-   It should work on any distro that follows the FHS. However, I would
-   recommend reading it and confirming that it will work correctly on your 
-   distro.
-4. inside the release directory, run `sudo ./install_release.sh`
+    - optionally, for [audio](https://github.com/RustAudio/rodio?tab=readme-ov-file#dependencies-linux-only):
+        - on Arch: alsa-lib
+        - on Debian/Ubuntu: libasound2-dev
+        - on Fedora: alsa-lib-devel
+2. `SAND_ENV=release cargo build --release
+3. `install -m755 target/release/sand /usr/bin/sand`
+3. Copy the systemd units from `resources/systemd/` into `/usr/lib/systemd/user/`
+4. Copy `resources/timer_sound.flac` units into `/usr/share/sand-timer/`
 
 ## Setup
 After installing, you'll need to enable and start the service. 
@@ -49,16 +89,6 @@ yourself. You can find a list of potential options [here](https://wiki.archlinux
 
 You can type 
 ```console
-$ sand 0
+$ sand start 0
 ```
 to check everything's working correctly.
-
-## Building from source
-You'll need a lean toolchain, which can be installed using [elan](https://github.com/leanprover/elan). 
-
-Once that's done, run
-```console
-$ lake build
-```
-
-The executable will be in `./.lake/build/bin/sand`.
