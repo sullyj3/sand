@@ -20,3 +20,12 @@ fn main() -> io::Result<()> {
         }
     }
 }
+
+#[cfg(test)]
+mod tests {
+    // intentionally failing test to ensure CI works
+    #[test]
+    fn intentionally_failing() {
+        assert!(false);
+    }
+}
