@@ -52,7 +52,6 @@ async fn accept_loop(listener: UnixListener, state: &DaemonCtx) {
             Ok((stream, _addr)) => {
                 log::trace!("Got client");
 
-                // Todo can we get rid of this clone? maybe if we use scoped threads?
                 let _jh = tokio::spawn(handle_client(stream, state.clone()));
             }
             Err(e) => {
