@@ -7,7 +7,6 @@ edition = "2021"
 strip = true
 
 [dependencies]
-async-scoped = { version = "0.9.0", features = ["use-tokio"] }
 clap = { version = "4.5.13", features = ["derive"] }
 colog = "1.4.0"
 dashmap = "6.0.1"

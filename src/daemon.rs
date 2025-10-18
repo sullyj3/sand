@@ -8,12 +8,9 @@ use std::os::fd::RawFd;
 use std::os::unix;
 use std::os::unix::fs::FileTypeExt;
 use std::path::PathBuf;
-use async_scoped;
-use async_scoped::TokioScope;
 use rodio::OutputStream;
 use tokio;
 use tokio::net::UnixListener;
-use tokio::runtime::Runtime;
 
 use crate::cli;
 use crate::sand::socket::env_sock_path;
@@ -45,7 +42,7 @@ fn get_fd() -> RawFd {
     }
 }
 
-async fn accept_loop(listener: UnixListener, state: &DaemonCtx) {
+async fn accept_loop(listener: UnixListener, state: DaemonCtx) {
     log::info!("Starting accept loop");
     loop {
         match listener.accept().await {
@@ -123,13 +120,11 @@ async fn daemon() -> io::Result<()> {
     let listener: UnixListener = get_socket()?;
 
     log::info!("Daemon started.");
-    TokioScope::scope_and_block(|scope| {
-        scope.spawn(accept_loop(listener, &state));
-    });
+    accept_loop(listener, state).await;
 
     Ok(())
 }
 
 pub fn main(_args: cli::DaemonArgs) -> io::Result<()> {
-    Runtime::new()?.block_on(daemon())
+    tokio::runtime::Runtime::new()?.block_on(daemon())
 }
