@@ -21,6 +21,27 @@ pub struct DaemonCtx {
     player: Option<ElapsedSoundPlayer>,
 }
 
+fn do_notification(player: Option<&ElapsedSoundPlayer>) {
+    let notification = Notification::new()
+        .summary("Time's up!")
+        .body("Your timer has elapsed")
+        .icon("alarm")
+        .urgency(notify_rust::Urgency::Critical)
+        .show();
+    if let Err(e) = notification {
+        log::error!("Error showing desktop notification: {e}");
+    }
+        
+    if let Some(ref player) = player {
+        log::debug!("playing sound");
+        if let Err(e) = player.play() {
+            log::error!("Error playing timer elapsed sound: {e}");
+        }
+    } else {
+        log::debug!("player is None - not playing sound");
+    }
+}
+
 impl DaemonCtx {
     pub fn new(stream_handle: Option<OutputStreamHandle>) -> Self {
         log::trace!("stream_handle is {}", if stream_handle.is_some() {"some"} else {"none"});
@@ -55,24 +76,7 @@ impl DaemonCtx {
         tokio::time::sleep(duration).await;
         log::info!("Timer {id} completed");
 
-        let notification = Notification::new()
-            .summary("Time's up!")
-            .body("Your timer has elapsed")
-            .icon("alarm")
-            .urgency(notify_rust::Urgency::Critical)
-            .show();
-        if let Err(e) = notification {
-            log::error!("Error showing desktop notification: {e}");
-        }
-            
-        if let Some(ref player) = self.player {
-            log::debug!("playing sound");
-            if let Err(e) = player.play() {
-                log::error!("Error playing timer elapsed sound: {e}");
-            }
-        } else {
-            log::debug!("DaemonCtx.play is None - not playing sound");
-        }
+        do_notification(self.player.as_ref());
         // Since the countdown is started concurrently with adding the timer to
         // the map, we need to ensure that it has been added before we remove 
         // it, in case the duration of the countdown is short or 0.
