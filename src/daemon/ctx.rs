@@ -93,6 +93,9 @@ impl DaemonCtx {
         // I'm not thrilled with the `Notify` based solution, it feels a little
         // awkward. I'm not sure whether there's a better way.
 
+        // this seems like exactly the sort of thing `waitmap` was designed for,
+        // but it looks unmaintained
+
         // Possibly we could have the countdown notify some central thread that
         // it's done through a chan. Then the central thread could instead be
         // responsible for doing the notification, playing the sound and removing
