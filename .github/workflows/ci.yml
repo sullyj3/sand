@@ -28,6 +28,7 @@ jobs:
         with: 
           toolchain: nightly
       - run: cargo build --release
+      - run: cargo test --release
       - name: Set up Python
         uses: actions/setup-python@v5
         with:
