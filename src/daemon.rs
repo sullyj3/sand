@@ -8,11 +8,13 @@ use std::os::fd::RawFd;
 use std::os::unix;
 use std::os::unix::fs::FileTypeExt;
 use std::path::PathBuf;
+use logind_zbus::manager::ManagerProxy;
 use notify_rust::Notification;
 use tokio;
 use tokio::net::UnixListener;
 use tokio::sync::mpsc;
 use tokio::sync::mpsc::Receiver;
+use tokio_stream::StreamExt;
 
 use crate::cli;
 use crate::sand::audio::ElapsedSoundPlayer;
@@ -101,7 +103,35 @@ fn get_socket() -> io::Result<UnixListener> {
     })
 }
 
+async fn monitor_dbus_suspend_events() -> zbus::Result<()> {
+    use zbus::Connection;
+    let connection = Connection::system().await?;
+    let manager = ManagerProxy::new(&connection).await?;
+    let mut stream = manager.receive_prepare_for_sleep().await?;
+    
+    while let Some(signal) = stream.next().await {
+        let start = signal.args()?.start;
+        log::trace!("Received PrepareForSleep(start={start})");
+        if start {
+            // before sleep
+            log::info!("System is preparing to sleep.");
+        } else {
+            log::info!("System just woke up.");
+            // after sleep
+        }
+    }
+    log::warn!(
+        concat!(
+            "D-Bus connection was lost.\n",
+            "Sand will be unable to correctly handle system sleep."
+        ));
+
+    Ok(())
+}
+
+
 async fn daemon() -> io::Result<()> {
+    // Logging
     let mut log_builder = colog::default_builder();
     if std::env::var("RUST_LOG").is_err() {
         if cfg!(debug_assertions) {
@@ -111,9 +141,18 @@ async fn daemon() -> io::Result<()> {
     log_builder.init();
     log::info!("Starting sand daemon v{}", env!("CARGO_PKG_VERSION"));
 
+    // Generate notifications and sounds for elapsed timers
     let (tx_elapsed_events, rx_elapsed_events) = mpsc::channel(20);
     tokio::spawn(notifier_thread(rx_elapsed_events));
     let listener: UnixListener = get_socket()?;
+
+    tokio::spawn(async {
+        if let Err(err) = monitor_dbus_suspend_events().await {
+            log::error!("Error monitoring PrepareForSleep signals: {err}");
+        }
+    });
+
+    // handle client connections
     log::info!("Daemon started.");
     accept_loop(listener, DaemonCtx {
         timers: Default::default(),
