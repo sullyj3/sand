@@ -9,7 +9,6 @@ use std::os::unix;
 use std::os::unix::fs::FileTypeExt;
 use std::path::PathBuf;
 use notify_rust::Notification;
-use rodio::OutputStream;
 use tokio;
 use tokio::net::UnixListener;
 use tokio::sync::mpsc;
@@ -148,7 +147,7 @@ pub fn do_notification(player: Option<ElapsedSoundPlayer>, timer_id: TimerId) {
 }
 
 async fn notifier_thread(mut elapsed_events: Receiver<ElapsedEvent>) -> ! {
-    let stream_handle = match OutputStream::try_default() {
+    let stream_handle = match rodio::OutputStream::try_default() {
         Ok((stream, handle)) => {
             mem::forget(stream);
             Some(handle)
