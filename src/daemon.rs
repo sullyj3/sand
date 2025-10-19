@@ -13,6 +13,7 @@ use tokio;
 use tokio::net::UnixListener;
 
 use crate::cli;
+use crate::sand::audio::ElapsedSoundPlayer;
 use crate::sand::socket::env_sock_path;
 use handle_client::handle_client;
 use ctx::DaemonCtx;
@@ -42,14 +43,14 @@ fn get_fd() -> RawFd {
     }
 }
 
-async fn accept_loop(listener: UnixListener, state: DaemonCtx) {
+async fn accept_loop(listener: UnixListener, ctx: DaemonCtx) {
     log::info!("Starting accept loop");
     loop {
         match listener.accept().await {
             Ok((stream, _addr)) => {
                 log::trace!("Got client");
 
-                let _jh = tokio::spawn(handle_client(stream, state.clone()));
+                let _jh = tokio::spawn(handle_client(stream, ctx.clone()));
             }
             Err(e) => {
                 log::error!("Failed to accept client: {}", e);
@@ -105,7 +106,7 @@ async fn daemon() -> io::Result<()> {
 
     log::info!("Starting sand daemon v{}", env!("CARGO_PKG_VERSION"));
 
-    let o_handle = match OutputStream::try_default() {
+    let stream_handle = match OutputStream::try_default() {
         Ok((stream, handle)) => {
             mem::forget(stream);
             Some(handle)
@@ -116,11 +117,36 @@ async fn daemon() -> io::Result<()> {
         }
     };
 
-    let state = DaemonCtx::new(o_handle);
+    log::trace!("stream_handle is {}", 
+        if stream_handle.is_some() {"some"} else {"none"});
+
+    let player = stream_handle.and_then(|handle| {
+        let elapsed_sound_player = ElapsedSoundPlayer::new(handle);
+        log::trace!(
+            "elapsed_sound_player is {}",
+            if elapsed_sound_player.is_ok() {"ok"} else {"err"});
+        if let Err(e) = &elapsed_sound_player {
+            log::debug!("{:?}", e);
+        }
+        elapsed_sound_player.ok()
+    });
+    log::trace!("player is {}", if player.is_some() {"some"} else {"none"});
+    match player {
+        Some(_) => log::debug!("ElapsedSoundPlayer successfully initialized."),
+        None => log::warn!(
+            "Failed to initialize elapsed sound player.\n\
+                There will be no timer sounds."),
+    }
+
+
+    let ctx = DaemonCtx {
+        timers: Default::default(),
+        player,
+    };
     let listener: UnixListener = get_socket()?;
 
     log::info!("Daemon started.");
-    accept_loop(listener, state).await;
+    accept_loop(listener, ctx).await;
 
     Ok(())
 }

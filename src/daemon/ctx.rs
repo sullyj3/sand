@@ -3,7 +3,6 @@ use std::time::Duration;
 use std::time::Instant;
 
 use notify_rust::Notification;
-use rodio::OutputStreamHandle;
 use tokio::sync::Notify;
 use tokio::task::JoinHandle;
 
@@ -17,8 +16,8 @@ use crate::sand::timers::Timers;
 /// Should be cheap to clone.
 #[derive(Clone)]
 pub struct DaemonCtx {
-    timers: Arc<Timers>,
-    player: Option<ElapsedSoundPlayer>,
+    pub timers: Arc<Timers>,
+    pub player: Option<ElapsedSoundPlayer>,
 }
 
 fn do_notification(player: Option<&ElapsedSoundPlayer>) {
@@ -43,31 +42,6 @@ fn do_notification(player: Option<&ElapsedSoundPlayer>) {
 }
 
 impl DaemonCtx {
-    pub fn new(stream_handle: Option<OutputStreamHandle>) -> Self {
-        log::trace!("stream_handle is {}", if stream_handle.is_some() {"some"} else {"none"});
-        let player = stream_handle.and_then(|handle| {
-            let elapsed_sound_player = ElapsedSoundPlayer::new(handle);
-            log::trace!(
-                "elapsed_sound_player is {}",
-                if elapsed_sound_player.is_ok() {"ok"} else {"err"});
-            if let Err(e) = &elapsed_sound_player {
-                log::debug!("{:?}", e);
-            }
-            elapsed_sound_player.ok()
-        });
-        log::trace!("player is {}", if player.is_some() {"some"} else {"none"});
-        match player {
-            Some(_) => log::debug!("ElapsedSoundPlayer successfully initialized."),
-            None => log::warn!(
-                "Failed to initialize elapsed sound player.\n\
-                 There will be no timer sounds."),
-        }
-        Self {
-            timers: Default::default(),
-            player,
-        }
-    }
-
     pub fn get_timerinfo_for_client(&self, now: Instant) -> Vec<TimerInfoForClient> {
         self.timers.get_timerinfo_for_client(now)
     }
