@@ -2,11 +2,11 @@ use std::sync::Arc;
 use std::time::Duration;
 use std::time::Instant;
 
-use notify_rust::Notification;
+use tokio::sync::mpsc::Sender;
 use tokio::sync::Notify;
 use tokio::task::JoinHandle;
 
-use crate::sand::audio::ElapsedSoundPlayer;
+use crate::daemon::ElapsedEvent;
 use crate::sand::message;
 use crate::sand::timer::Timer;
 use crate::sand::timer::TimerId;
@@ -17,28 +17,7 @@ use crate::sand::timers::Timers;
 #[derive(Clone)]
 pub struct DaemonCtx {
     pub timers: Arc<Timers>,
-    pub player: Option<ElapsedSoundPlayer>,
-}
-
-fn do_notification(player: Option<&ElapsedSoundPlayer>) {
-    let notification = Notification::new()
-        .summary("Time's up!")
-        .body("Your timer has elapsed")
-        .icon("alarm")
-        .urgency(notify_rust::Urgency::Critical)
-        .show();
-    if let Err(e) = notification {
-        log::error!("Error showing desktop notification: {e}");
-    }
-        
-    if let Some(ref player) = player {
-        log::debug!("playing sound");
-        if let Err(e) = player.play() {
-            log::error!("Error playing timer elapsed sound: {e}");
-        }
-    } else {
-        log::debug!("player is None - not playing sound");
-    }
+    pub tx_elapsed_events: Sender<ElapsedEvent>,
 }
 
 impl DaemonCtx {
@@ -50,7 +29,9 @@ impl DaemonCtx {
         tokio::time::sleep(duration).await;
         log::info!("Timer {id} completed");
 
-        do_notification(self.player.as_ref());
+        self.tx_elapsed_events.send(ElapsedEvent)
+            .await
+            .expect("elapsed event receiver was closed");
         // Since the countdown is started concurrently with adding the timer to
         // the map, we need to ensure that it has been added before we remove 
         // it, in case the duration of the countdown is short or 0.

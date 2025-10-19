@@ -8,9 +8,12 @@ use std::os::fd::RawFd;
 use std::os::unix;
 use std::os::unix::fs::FileTypeExt;
 use std::path::PathBuf;
+use notify_rust::Notification;
 use rodio::OutputStream;
 use tokio;
 use tokio::net::UnixListener;
+use tokio::sync::mpsc;
+use tokio::sync::mpsc::Receiver;
 
 use crate::cli;
 use crate::sand::audio::ElapsedSoundPlayer;
@@ -43,7 +46,10 @@ fn get_fd() -> RawFd {
     }
 }
 
-async fn accept_loop(listener: UnixListener, ctx: DaemonCtx) {
+async fn accept_loop(
+    listener: UnixListener,
+    ctx: DaemonCtx,
+) {
     log::info!("Starting accept loop");
     loop {
         match listener.accept().await {
@@ -103,9 +109,44 @@ async fn daemon() -> io::Result<()> {
         };
     }
     log_builder.init();
-
     log::info!("Starting sand daemon v{}", env!("CARGO_PKG_VERSION"));
 
+    let (tx_elapsed_events, rx_elapsed_events) = mpsc::channel(20);
+    tokio::spawn(notifier_thread(rx_elapsed_events));
+    let listener: UnixListener = get_socket()?;
+    log::info!("Daemon started.");
+    accept_loop(listener, DaemonCtx {
+        timers: Default::default(),
+        tx_elapsed_events,
+    }).await;
+
+    Ok(())
+}
+
+struct ElapsedEvent;
+
+pub fn do_notification(player: Option<ElapsedSoundPlayer>) {
+    let notification = Notification::new()
+        .summary("Time's up!")
+        .body("Your timer has elapsed")
+        .icon("alarm")
+        .urgency(notify_rust::Urgency::Critical)
+        .show();
+    if let Err(e) = notification {
+        log::error!("Error showing desktop notification: {e}");
+    }
+        
+    if let Some(ref player) = player {
+        log::debug!("playing sound");
+        if let Err(e) = player.play() {
+            log::error!("Error playing timer elapsed sound: {e}");
+        }
+    } else {
+        log::debug!("player is None - not playing sound");
+    }
+}
+
+async fn notifier_thread(mut elapsed_events: Receiver<ElapsedEvent>) -> ! {
     let stream_handle = match OutputStream::try_default() {
         Ok((stream, handle)) => {
             mem::forget(stream);
@@ -138,17 +179,13 @@ async fn daemon() -> io::Result<()> {
                 There will be no timer sounds."),
     }
 
-
-    let ctx = DaemonCtx {
-        timers: Default::default(),
-        player,
-    };
-    let listener: UnixListener = get_socket()?;
-
-    log::info!("Daemon started.");
-    accept_loop(listener, ctx).await;
-
-    Ok(())
+    while let Some(ElapsedEvent) = elapsed_events.recv().await {
+        let player = player.clone();
+        tokio::spawn(async move {
+            do_notification(player);
+        });
+    }
+    unreachable!("bug: elapsed_events channel was closed.")
 }
 
 pub fn main(_args: cli::DaemonArgs) -> io::Result<()> {
