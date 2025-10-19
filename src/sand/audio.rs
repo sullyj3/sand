@@ -11,17 +11,17 @@ use crate::sand::PKGNAME;
 
 #[derive(Debug, Clone)]
 #[repr(transparent)]
-pub struct Sound {
+pub struct SoundHandle {
     data: Arc<[u8]>,
 }
 
-impl AsRef<[u8]> for Sound {
+impl AsRef<[u8]> for SoundHandle {
     fn as_ref(&self) -> &[u8] {
         &self.data
     }
 }
 
-impl Sound {
+impl SoundHandle {
     pub fn load<P>(path: P) -> io::Result<Self>
     where
         P: AsRef<Path>,
@@ -42,9 +42,9 @@ impl Sound {
         rodio::Decoder::new(self.cursor()).expect("Failed to decode the sound")
     }
 
-    pub fn play(&self, handle: &OutputStreamHandle) -> Result<(), rodio::PlayError> {
+    pub fn play(&self, output: &OutputStreamHandle) -> Result<(), rodio::PlayError> {
         let decoder = self.decoder();
-        handle.play_raw(decoder.convert_samples())
+        output.play_raw(decoder.convert_samples())
     }
 }
 
@@ -71,26 +71,22 @@ fn default_sound_path() -> PathBuf {
     path
 }
 
-fn load_elapsed_sound() -> io::Result<Sound> {
+fn load_elapsed_sound() -> io::Result<SoundHandle> {
     if let Some(ref xdg_path) = xdg_sound_path() {
-        let sound = Sound::load(xdg_path);
+        let sound = SoundHandle::load(xdg_path);
         if sound.is_ok() {
             return sound;
         }
     }
-    Sound::load(default_sound_path())
+    SoundHandle::load(default_sound_path())
 }
-
-// TODO: Does ElapsedSoundPlayer really need to be Clone? Does it belong in the DaemonCtx?
-// maybe no if we switch to a single audio thread that reads timer elapsed 
-// events from a channel
 
 // Trying to update rodio 0.20 -> 0.21, OutputStreamHandle no longer exists,
 // and OutputStream isn't Clone. Maybe could just stick it in an Arc<Mutex<>>?
 // not sure
 #[derive(Clone)]
 pub struct ElapsedSoundPlayer {
-    sound: Sound,
+    sound: SoundHandle,
     handle: OutputStreamHandle,
 }
 
