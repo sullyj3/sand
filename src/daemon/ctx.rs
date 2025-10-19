@@ -29,7 +29,7 @@ impl DaemonCtx {
         tokio::time::sleep(duration).await;
         log::info!("Timer {id} completed");
 
-        self.tx_elapsed_events.send(ElapsedEvent)
+        self.tx_elapsed_events.send(ElapsedEvent(id))
             .await
             .expect("elapsed event receiver was closed");
         // Since the countdown is started concurrently with adding the timer to

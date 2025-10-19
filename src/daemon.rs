@@ -18,6 +18,7 @@ use tokio::sync::mpsc::Receiver;
 use crate::cli;
 use crate::sand::audio::ElapsedSoundPlayer;
 use crate::sand::socket::env_sock_path;
+use crate::sand::timer::TimerId;
 use handle_client::handle_client;
 use ctx::DaemonCtx;
 
@@ -123,12 +124,12 @@ async fn daemon() -> io::Result<()> {
     Ok(())
 }
 
-struct ElapsedEvent;
+struct ElapsedEvent(TimerId);
 
-pub fn do_notification(player: Option<ElapsedSoundPlayer>) {
+pub fn do_notification(player: Option<ElapsedSoundPlayer>, timer_id: TimerId) {
     let notification = Notification::new()
         .summary("Time's up!")
-        .body("Your timer has elapsed")
+        .body(&format!("Timer {timer_id} has elapsed"))
         .icon("alarm")
         .urgency(notify_rust::Urgency::Critical)
         .show();
@@ -179,10 +180,10 @@ async fn notifier_thread(mut elapsed_events: Receiver<ElapsedEvent>) -> ! {
                 There will be no timer sounds."),
     }
 
-    while let Some(ElapsedEvent) = elapsed_events.recv().await {
+    while let Some(ElapsedEvent(timer_id)) = elapsed_events.recv().await {
         let player = player.clone();
         tokio::spawn(async move {
-            do_notification(player);
+            do_notification(player, timer_id);
         });
     }
     unreachable!("bug: elapsed_events channel was closed.")
