@@ -8,13 +8,11 @@ use std::os::fd::RawFd;
 use std::os::unix;
 use std::os::unix::fs::FileTypeExt;
 use std::path::PathBuf;
-use logind_zbus::manager::ManagerProxy;
 use notify_rust::Notification;
 use tokio;
 use tokio::net::UnixListener;
 use tokio::sync::mpsc;
 use tokio::sync::mpsc::Receiver;
-use tokio_stream::StreamExt;
 
 use crate::cli;
 use crate::sand::audio::ElapsedSoundPlayer;
@@ -51,7 +49,7 @@ fn get_fd() -> RawFd {
 async fn accept_loop(
     listener: UnixListener,
     ctx: DaemonCtx,
-) {
+) -> ! {
     log::info!("Starting accept loop");
     loop {
         match listener.accept().await {
@@ -103,32 +101,6 @@ fn get_socket() -> io::Result<UnixListener> {
     })
 }
 
-async fn monitor_dbus_suspend_events() -> zbus::Result<()> {
-    use zbus::Connection;
-    let connection = Connection::system().await?;
-    let manager = ManagerProxy::new(&connection).await?;
-    let mut stream = manager.receive_prepare_for_sleep().await?;
-    
-    while let Some(signal) = stream.next().await {
-        let start = signal.args()?.start;
-        log::trace!("Received PrepareForSleep(start={start})");
-        if start {
-            // before sleep
-            log::info!("System is preparing to sleep.");
-        } else {
-            log::info!("System just woke up.");
-            // after sleep
-        }
-    }
-    log::warn!(
-        concat!(
-            "D-Bus connection was lost.\n",
-            "Sand will be unable to correctly handle system sleep."
-        ));
-
-    Ok(())
-}
-
 
 async fn daemon() -> io::Result<()> {
     // Logging
@@ -144,22 +116,21 @@ async fn daemon() -> io::Result<()> {
     // Generate notifications and sounds for elapsed timers
     let (tx_elapsed_events, rx_elapsed_events) = mpsc::channel(20);
     tokio::spawn(notifier_thread(rx_elapsed_events));
-    let listener: UnixListener = get_socket()?;
 
-    tokio::spawn(async {
-        if let Err(err) = monitor_dbus_suspend_events().await {
+    let ctx = DaemonCtx { timers: Default::default(), tx_elapsed_events };
+
+    // Handle system suspend
+    let s_ctx = ctx.clone();
+    tokio::spawn(async move {
+        if let Err(err) = s_ctx.monitor_dbus_suspend_events().await {
             log::error!("Error monitoring PrepareForSleep signals: {err}");
         }
     });
 
     // handle client connections
+    let listener: UnixListener = get_socket()?;
     log::info!("Daemon started.");
-    accept_loop(listener, DaemonCtx {
-        timers: Default::default(),
-        tx_elapsed_events,
-    }).await;
-
-    Ok(())
+    accept_loop(listener, ctx).await;
 }
 
 struct ElapsedEvent(TimerId);
