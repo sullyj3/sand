@@ -1,12 +1,12 @@
 
-use std::time::Instant;
+use std::time::{Duration, Instant};
 
 use dashmap::{DashMap, Entry, VacantEntry};
 
 use crate::sand::timer::*;
 
 #[derive(Default, Debug)]
-pub struct Timers(DashMap<TimerId, Timer>);
+pub struct Timers(pub DashMap<TimerId, Timer>);
 
 impl Timers{
     pub fn entry(&self, id: TimerId) -> Entry<'_, TimerId, Timer> {
@@ -34,5 +34,19 @@ impl Timers{
                 Entry::Vacant(vacant_entry) => Some(vacant_entry),
             }
         }).unwrap()
+    }
+
+    // cancel countdown tasks for all running timers, returning a list of their
+    // ids and remaining durations
+    pub fn cancel_running_countdowns(&self) -> Vec<(TimerId, Duration)> {
+        let mut running_timers = Vec::with_capacity(self.0.len());
+        for ref_multi in &self.0 {
+            if let Timer::Running {due, countdown} = ref_multi.value() {
+                countdown.abort();
+                let remaining: Duration = *due - Instant::now();
+                running_timers.push((*ref_multi.key(), remaining));
+            }
+        }
+        running_timers
     }
 }
