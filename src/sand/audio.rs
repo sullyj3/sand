@@ -72,7 +72,7 @@ fn default_sound_path() -> PathBuf {
 }
 
 fn load_elapsed_sound() -> io::Result<SoundHandle> {
-    if let Some(ref xdg_path) = xdg_sound_path() {
+    if let Some(xdg_path) = xdg_sound_path() {
         let sound = SoundHandle::load(xdg_path);
         if sound.is_ok() {
             return sound;
