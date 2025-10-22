@@ -48,7 +48,7 @@ impl CmdHandlerCtx {
     }
 
     fn cancel_timer(&self, id: TimerId) -> CancelTimerResponse {
-        self.state.cancel_timer(id)
+        self.state.cancel_timer(id, self.now)
     }
 }
 

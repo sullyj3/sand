@@ -11,6 +11,7 @@ use tokio::task::JoinHandle;
 use tokio_stream::StreamExt;
 
 use crate::daemon::ElapsedEvent;
+use crate::sand::duration::DurationExt;
 use crate::sand::message;
 use crate::sand::timer::Timer;
 use crate::sand::timer::TimerId;
@@ -172,6 +173,11 @@ impl DaemonCtx {
             countdown: join_handle,
         });
         notify_added.notify_one();
+        log::info!(
+            "Started timer {} for {}",
+            id,
+            duration.format_colon_separated()
+        );
         id
     }
 
@@ -179,6 +185,7 @@ impl DaemonCtx {
         use message::PauseTimerResponse as Resp;
 
         let dashmap::Entry::Occupied(mut entry) = self.timers.entry(id) else {
+            log::error!("Timer {} not found", id);
             return Resp::TimerNotFound;
         };
         let timer = entry.get_mut();
@@ -187,12 +194,19 @@ impl DaemonCtx {
         match timer {
             T::Running { due, countdown } => {
                 countdown.abort();
-                *timer = T::Paused {
-                    remaining: *due - now,
-                };
+                let remaining = *due - now;
+                *timer = T::Paused { remaining };
+                log::info!(
+                    "Paused timer {}, {} remaining",
+                    id,
+                    remaining.format_colon_separated()
+                );
                 Resp::Ok
             }
-            T::Paused { remaining: _ } => Resp::AlreadyPaused,
+            T::Paused { remaining: _ } => {
+                log::error!("Timer {} is already paused", id);
+                Resp::AlreadyPaused
+            }
         }
     }
 
@@ -200,6 +214,7 @@ impl DaemonCtx {
         use message::ResumeTimerResponse as Resp;
 
         let dashmap::Entry::Occupied(mut entry) = self.timers.entry(id) else {
+            log::error!("Timer {} not found", id);
             return Resp::TimerNotFound;
         };
         let timer = entry.get_mut();
@@ -208,6 +223,11 @@ impl DaemonCtx {
         match timer {
             T::Paused { remaining } => {
                 let (join_handle, notify_added) = self.spawn_countdown(id, *remaining);
+                log::info!(
+                    "Resumed timer {}, {} remaining",
+                    id,
+                    remaining.format_colon_separated()
+                );
                 *timer = T::Running {
                     due: now + *remaining,
                     countdown: join_handle,
@@ -218,20 +238,38 @@ impl DaemonCtx {
             T::Running {
                 due: _,
                 countdown: _,
-            } => Resp::AlreadyRunning,
+            } => {
+                log::error!("Timer {} is already running", id);
+                Resp::AlreadyRunning
+            }
         }
     }
 
-    pub fn cancel_timer(&self, id: TimerId) -> message::CancelTimerResponse {
+    pub fn cancel_timer(&self, id: TimerId, now: Instant) -> message::CancelTimerResponse {
         use message::CancelTimerResponse as Resp;
 
         let dashmap::Entry::Occupied(entry) = self.timers.entry(id) else {
+            log::error!("Timer {} not found", id);
             return Resp::TimerNotFound;
         };
         let timer = entry.get();
         match timer {
-            Timer::Paused { remaining: _ } => {}
-            Timer::Running { due: _, countdown } => countdown.abort(),
+            Timer::Paused { remaining } => {
+                log::info!(
+                    "Cancelled paused timer {} with {} remaining",
+                    id,
+                    remaining.format_colon_separated()
+                );
+            }
+            Timer::Running { due, countdown } => {
+                let remaining = *due - now;
+                log::info!(
+                    "Cancelled running timer {} with {} remaining",
+                    id,
+                    remaining.format_colon_separated()
+                );
+                countdown.abort()
+            }
         }
         entry.remove();
         Resp::Ok
