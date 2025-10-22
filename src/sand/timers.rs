@@ -4,6 +4,10 @@ use dashmap::{DashMap, Entry, VacantEntry};
 
 use crate::sand::timer::*;
 
+// TODO: This doesn't really need to be a hashmap, since it's keyed by a newtype
+// on a u64. Should be some kind of vec probably. Slotmap doesn't work on its
+// own, because the timer ids can't be opaque - they're part of the UI.
+// eg `sand pause 1`
 #[derive(Default, Debug)]
 pub struct Timers(pub DashMap<TimerId, Timer>);
 

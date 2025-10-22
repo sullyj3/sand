@@ -98,6 +98,12 @@ fn get_socket() -> io::Result<UnixListener> {
         })
 }
 
+// TODO: I think we can refactor the waiting to be a single task instead of an
+// individual one for each timer. We can store all timers in order of next due,
+// and use select! to simultaneously wait for the next due timer elapse or a
+// Notify that's triggered whenever a timer is added. The notify would prompt
+// us to re-check the new next due timer in case the newly added timer has a
+// shorter duration than the current next due timer.
 async fn daemon() -> io::Result<()> {
     // Logging
     let mut log_builder = colog::default_builder();
