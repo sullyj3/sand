@@ -33,11 +33,12 @@ impl DaemonCtx {
         tokio::time::sleep(duration).await;
         log::info!("Timer {id} completed");
 
-        self.tx_elapsed_events.send(ElapsedEvent(id))
+        self.tx_elapsed_events
+            .send(ElapsedEvent(id))
             .await
             .expect("elapsed event receiver was closed");
         // Since the countdown is started concurrently with adding the timer to
-        // the map, we need to ensure that it has been added before we remove 
+        // the map, we need to ensure that it has been added before we remove
         // it, in case the duration of the countdown is short or 0.
         rx_added.notified().await;
         self.timers.elapse(id)
@@ -54,28 +55,31 @@ impl DaemonCtx {
         let manager = ManagerProxy::new(&connection).await?;
 
         let mut stream = manager.receive_prepare_for_sleep().await?;
-        
+
         loop {
-            // 
+            //
             // Handle Suspend
-            // 
-            let Some(signal) = stream.next().await else { break };
+            //
+            let Some(signal) = stream.next().await else {
+                break;
+            };
             let start = signal.args()?.start;
             log::trace!("Received PrepareForSleep(start={start})");
             // Expect to suspend
             if !start {
                 log::warn!("Received wake signal without preceding sleep. Ignoring.");
                 continue;
-            }            
+            }
             let slept_at = SystemTime::now();
             log::info!("System is preparing to sleep.");
-            let running_timers: Vec<(TimerId, Duration)> =
-                self.timers.cancel_running_countdowns();
+            let running_timers: Vec<(TimerId, Duration)> = self.timers.cancel_running_countdowns();
 
-            // 
+            //
             // Then Handle awake
-            // 
-            let Some(signal) = stream.next().await else { break };
+            //
+            let Some(signal) = stream.next().await else {
+                break;
+            };
             let start = signal.args()?.start;
             // Expect to wake
             if start {
@@ -98,7 +102,8 @@ impl DaemonCtx {
                 if remaining < sleep_duration {
                     // Handle timers that elapsed while the system was asleep
                     self.timers.0.remove(&timer_id);
-                    self.tx_elapsed_events.send(ElapsedEvent(timer_id))
+                    self.tx_elapsed_events
+                        .send(ElapsedEvent(timer_id))
                         .await
                         .expect("elapsed event receiver was closed");
                 } else {
@@ -116,7 +121,7 @@ impl DaemonCtx {
                         continue;
                     };
 
-                    let (new_countdown, notify_added) = 
+                    let (new_countdown, notify_added) =
                         self.spawn_countdown(timer_id, new_duration);
                     *due = new_due;
                     *countdown = new_countdown;
@@ -125,19 +130,18 @@ impl DaemonCtx {
             }
         }
 
-        log::warn!(
-            concat!(
-                "D-Bus connection was lost.\n",
-                "Sand will be unable to correctly handle system sleep."
-            ));
+        log::warn!(concat!(
+            "D-Bus connection was lost.\n",
+            "Sand will be unable to correctly handle system sleep."
+        ));
 
         Ok(())
     }
 
-    fn spawn_countdown(&self, id: TimerId, duration: Duration) -> (JoinHandle<()>, Arc<Notify>)  {
-        // Once the countdown has elapsed, it removes its associated `Timer` 
-        // from the Timers map by calling `timers.elapse(id)`. For short 
-        // durations (eg 0), We need to synchronize to ensure it doesn't do 
+    fn spawn_countdown(&self, id: TimerId, duration: Duration) -> (JoinHandle<()>, Arc<Notify>) {
+        // Once the countdown has elapsed, it removes its associated `Timer`
+        // from the Timers map by calling `timers.elapse(id)`. For short
+        // durations (eg 0), We need to synchronize to ensure it doesn't do
         // this til after it's been added. This is what `notify_added` is for.
 
         // I'm not thrilled with the `Notify` based solution, it feels a little
@@ -149,14 +153,12 @@ impl DaemonCtx {
         // Possibly we could have the countdown notify some central thread that
         // it's done through a chan. Then the central thread could instead be
         // responsible for doing the notification, playing the sound and removing
-        // the elapsed timer from the map. It's not obvious to me whether that 
-        // would be simpler. The central thread would still have to somehow 
+        // the elapsed timer from the map. It's not obvious to me whether that
+        // would be simpler. The central thread would still have to somehow
         // wait for the timer to be added before removing it.
         let notify_added = Arc::new(Notify::new());
         let rx_added = notify_added.clone();
-        let join_handle = tokio::spawn(
-            self.clone().countdown(id, duration, rx_added)
-        );
+        let join_handle = tokio::spawn(self.clone().countdown(id, duration, rx_added));
         (join_handle, notify_added)
     }
 
@@ -165,14 +167,17 @@ impl DaemonCtx {
         let id = *vacant.key();
 
         let (join_handle, notify_added) = self.spawn_countdown(id, duration);
-        vacant.insert(Timer::Running { due: now + duration, countdown: join_handle });
+        vacant.insert(Timer::Running {
+            due: now + duration,
+            countdown: join_handle,
+        });
         notify_added.notify_one();
         id
     }
 
     pub fn pause_timer(&self, id: TimerId, now: Instant) -> message::PauseTimerResponse {
         use message::PauseTimerResponse as Resp;
-        
+
         let dashmap::Entry::Occupied(mut entry) = self.timers.entry(id) else {
             return Resp::TimerNotFound;
         };
@@ -182,13 +187,15 @@ impl DaemonCtx {
         match timer {
             T::Running { due, countdown } => {
                 countdown.abort();
-                *timer = T::Paused { remaining: *due - now };
+                *timer = T::Paused {
+                    remaining: *due - now,
+                };
                 Resp::Ok
-            },
+            }
             T::Paused { remaining: _ } => Resp::AlreadyPaused,
         }
     }
-    
+
     pub fn resume_timer(&self, id: TimerId, now: Instant) -> message::ResumeTimerResponse {
         use message::ResumeTimerResponse as Resp;
 
@@ -201,14 +208,20 @@ impl DaemonCtx {
         match timer {
             T::Paused { remaining } => {
                 let (join_handle, notify_added) = self.spawn_countdown(id, *remaining);
-                *timer = T::Running { due: now + *remaining, countdown: join_handle };
+                *timer = T::Running {
+                    due: now + *remaining,
+                    countdown: join_handle,
+                };
                 notify_added.notify_one();
                 Resp::Ok
-            },
-            T::Running { due: _, countdown: _ } => Resp::AlreadyRunning,
+            }
+            T::Running {
+                due: _,
+                countdown: _,
+            } => Resp::AlreadyRunning,
         }
     }
-    
+
     pub fn cancel_timer(&self, id: TimerId) -> message::CancelTimerResponse {
         use message::CancelTimerResponse as Resp;
 
@@ -217,7 +230,7 @@ impl DaemonCtx {
         };
         let timer = entry.get();
         match timer {
-            Timer::Paused { remaining: _ } => {},
+            Timer::Paused { remaining: _ } => {}
             Timer::Running { due: _, countdown } => countdown.abort(),
         }
         entry.remove();

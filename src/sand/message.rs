@@ -1,5 +1,5 @@
-use serde::{Deserialize, Serialize};
 use derive_more::From;
+use serde::{Deserialize, Serialize};
 
 use crate::sand::timer::*;
 

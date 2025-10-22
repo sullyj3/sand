@@ -1,6 +1,7 @@
-mod handle_client;
 mod ctx;
+mod handle_client;
 
+use notify_rust::Notification;
 use std::io;
 use std::mem;
 use std::os::fd::FromRawFd;
@@ -8,7 +9,6 @@ use std::os::fd::RawFd;
 use std::os::unix;
 use std::os::unix::fs::FileTypeExt;
 use std::path::PathBuf;
-use notify_rust::Notification;
 use tokio;
 use tokio::net::UnixListener;
 use tokio::sync::mpsc;
@@ -18,8 +18,8 @@ use crate::cli;
 use crate::sand::audio::ElapsedSoundPlayer;
 use crate::sand::socket::env_sock_path;
 use crate::sand::timer::TimerId;
-use handle_client::handle_client;
 use ctx::DaemonCtx;
+use handle_client::handle_client;
 
 const SYSTEMD_SOCKFD: RawFd = 3;
 
@@ -46,10 +46,7 @@ fn get_fd() -> RawFd {
     }
 }
 
-async fn accept_loop(
-    listener: UnixListener,
-    ctx: DaemonCtx,
-) -> ! {
+async fn accept_loop(listener: UnixListener, ctx: DaemonCtx) -> ! {
     log::info!("Starting accept loop");
     loop {
         match listener.accept().await {
@@ -82,25 +79,24 @@ fn get_socket() -> io::Result<UnixListener> {
                     log::error!(
                         "SAND_SOCK_PATH {:?} exists but is not a socket.\n\
                          (type: {:?})\n\
-                         Refusing to overwrite — please remove or change SAND_SOCK_PATH."
-                        , path, meta.file_type());
-                        
+                         Refusing to overwrite — please remove or change SAND_SOCK_PATH.",
+                        path,
+                        meta.file_type()
+                    );
+
                     std::process::exit(1);
                 }
             }
-
         })
         .map(UnixListener::bind)
         .unwrap_or_else(|| {
             let fd = get_fd();
-            let std_listener: unix::net::UnixListener = unsafe {
-                unix::net::UnixListener::from_raw_fd(fd) 
-            };
+            let std_listener: unix::net::UnixListener =
+                unsafe { unix::net::UnixListener::from_raw_fd(fd) };
             std_listener.set_nonblocking(true)?;
             UnixListener::from_std(std_listener)
-    })
+        })
 }
-
 
 async fn daemon() -> io::Result<()> {
     // Logging
@@ -117,7 +113,10 @@ async fn daemon() -> io::Result<()> {
     let (tx_elapsed_events, rx_elapsed_events) = mpsc::channel(20);
     tokio::spawn(notifier_thread(rx_elapsed_events));
 
-    let ctx = DaemonCtx { timers: Default::default(), tx_elapsed_events };
+    let ctx = DaemonCtx {
+        timers: Default::default(),
+        tx_elapsed_events,
+    };
 
     // Handle system suspend
     let s_ctx = ctx.clone();
@@ -145,7 +144,7 @@ pub fn do_notification(player: Option<ElapsedSoundPlayer>, timer_id: TimerId) {
     if let Err(e) = notification {
         log::error!("Error showing desktop notification: {e}");
     }
-        
+
     if let Some(ref player) = player {
         log::debug!("playing sound");
         if let Err(e) = player.play() {
@@ -168,25 +167,40 @@ async fn notifier_thread(mut elapsed_events: Receiver<ElapsedEvent>) -> ! {
         }
     };
 
-    log::trace!("stream_handle is {}", 
-        if stream_handle.is_some() {"some"} else {"none"});
+    log::trace!(
+        "stream_handle is {}",
+        if stream_handle.is_some() {
+            "some"
+        } else {
+            "none"
+        }
+    );
 
     let player = stream_handle.and_then(|handle| {
         let elapsed_sound_player = ElapsedSoundPlayer::new(handle);
         log::trace!(
             "elapsed_sound_player is {}",
-            if elapsed_sound_player.is_ok() {"ok"} else {"err"});
+            if elapsed_sound_player.is_ok() {
+                "ok"
+            } else {
+                "err"
+            }
+        );
         if let Err(e) = &elapsed_sound_player {
             log::debug!("{:?}", e);
         }
         elapsed_sound_player.ok()
     });
-    log::trace!("player is {}", if player.is_some() {"some"} else {"none"});
+    log::trace!(
+        "player is {}",
+        if player.is_some() { "some" } else { "none" }
+    );
     match player {
         Some(_) => log::debug!("ElapsedSoundPlayer successfully initialized."),
         None => log::warn!(
             "Failed to initialize elapsed sound player.\n\
-                There will be no timer sounds."),
+                There will be no timer sounds."
+        ),
     }
 
     while let Some(ElapsedEvent(timer_id)) = elapsed_events.recv().await {

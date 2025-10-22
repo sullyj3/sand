@@ -92,11 +92,11 @@ pub struct ElapsedSoundPlayer {
 
 impl ElapsedSoundPlayer {
     pub fn new(handle: OutputStreamHandle) -> io::Result<Self> {
-        load_elapsed_sound().inspect_err(|e| {
-            log::warn!("Error loading the audio file: {}", e);
-        }).map(|sound| {
-            Self {sound, handle}
-        })
+        load_elapsed_sound()
+            .inspect_err(|e| {
+                log::warn!("Error loading the audio file: {}", e);
+            })
+            .map(|sound| Self { sound, handle })
     }
 
     pub fn play(&self) -> Result<(), rodio::PlayError> {

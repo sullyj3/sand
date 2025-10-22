@@ -3,8 +3,8 @@
 use std::io;
 
 use clap::Parser;
-use sand::cli::CliCommand;
 use sand::cli;
+use sand::cli::CliCommand;
 
 mod client;
 mod daemon;
@@ -15,8 +15,6 @@ fn main() -> io::Result<()> {
 
     match cli.command() {
         CliCommand::Daemon(args) => daemon::main(args),
-        cmd => {
-            client::main(cmd)
-        }
+        cmd => client::main(cmd),
     }
 }

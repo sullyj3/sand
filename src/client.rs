@@ -1,15 +1,17 @@
 use std::io::{self, BufRead, BufReader, LineWriter, Write};
-use std::path::PathBuf;
 use std::os::unix::net::UnixStream;
+use std::path::PathBuf;
 use std::process::exit;
 use std::time::Duration;
 
 use serde::Deserialize;
 
-use crate::sand::cli::StartArgs;
 use crate::cli;
-use crate::sand::message::{self, AddTimerResponse, Command, ListResponse, PauseTimerResponse, ResumeTimerResponse};
+use crate::sand::cli::StartArgs;
 use crate::sand::duration::DurationExt;
+use crate::sand::message::{
+    self, AddTimerResponse, Command, ListResponse, PauseTimerResponse, ResumeTimerResponse,
+};
 use crate::sand::socket;
 use crate::sand::timer::{TimerId, TimerInfoForClient};
 
@@ -36,9 +38,8 @@ impl DaemonConnection {
     fn recv<T: for<'de> Deserialize<'de>>(&mut self) -> io::Result<T> {
         let mut recv_buf = String::with_capacity(128);
         self.read.read_line(&mut recv_buf)?;
-        let resp: T = serde_json::from_str(&recv_buf).expect(
-            "Bug: failed to deserialize response from daemon"
-        );
+        let resp: T = serde_json::from_str(&recv_buf)
+            .expect("Bug: failed to deserialize response from daemon");
         Ok(resp)
     }
 }
@@ -47,7 +48,8 @@ fn display_timer_info(timers: &[TimerInfoForClient]) -> String {
     if timers.len() == 0 {
         "No timers running.".into()
     } else {
-        timers.iter()
+        timers
+            .iter()
             .map(TimerInfoForClient::display)
             .intersperse("\n".to_string())
             .collect()
@@ -65,31 +67,33 @@ pub fn main(cmd: cli::CliCommand) -> io::Result<()> {
         eprintln!("no socket to use.");
         std::process::exit(1)
     };
-    
+
     let mut conn = match DaemonConnection::new(sock_path) {
         Ok(conn) => conn,
         Err(e) => {
             eprintln!("Error establishing connection with daemon: {e}");
             std::process::exit(1);
-        },
+        }
     };
 
-    // TODO: make sure to parse Error Messages. we should prob move sending, 
+    // TODO: make sure to parse Error Messages. we should prob move sending,
     // receiving, and parsing fully into DaemonConnection, and present
     // Command -> Result<CmdResponse, Error> type api
     match cmd {
-        cli::CliCommand::Start(StartArgs{ durations }) => {
+        cli::CliCommand::Start(StartArgs { durations }) => {
             let dur: Duration = durations.iter().sum();
-            conn.send(Command::AddTimer { duration: dur.as_millis() as u64 })?;
+            conn.send(Command::AddTimer {
+                duration: dur.as_millis() as u64,
+            })?;
             let AddTimerResponse::Ok { id } = conn.recv::<AddTimerResponse>()?;
-            
+
             let dur_string = dur.format_colon_separated();
             println!("Timer {id} created for {dur_string}.");
             Ok(())
         }
         cli::CliCommand::Ls => {
             conn.send(Command::List)?;
-            let ListResponse::Ok {ref timers } = conn.recv::<ListResponse>()?;
+            let ListResponse::Ok { ref timers } = conn.recv::<ListResponse>()?;
             println!("{}", display_timer_info(timers));
             Ok(())
         }
@@ -100,12 +104,12 @@ pub fn main(cmd: cli::CliCommand) -> io::Result<()> {
                 PauseTimerResponse::Ok => {
                     println!("Paused timer {timer_id}.");
                     Ok(())
-                },
+                }
                 PauseTimerResponse::TimerNotFound => exit_timer_not_found(timer_id),
                 PauseTimerResponse::AlreadyPaused => {
                     println!("Timer {timer_id} is already paused.");
                     exit(1);
-                },
+                }
             }
         }
         cli::CliCommand::Resume { timer_id } => {
@@ -116,12 +120,12 @@ pub fn main(cmd: cli::CliCommand) -> io::Result<()> {
                 Resp::Ok => {
                     println!("Resumed timer {timer_id}.");
                     Ok(())
-                },
+                }
                 Resp::TimerNotFound => exit_timer_not_found(timer_id),
                 Resp::AlreadyRunning => {
                     println!("Timer {timer_id} is already running.");
                     exit(1);
-                },
+                }
             }
         }
         cli::CliCommand::Cancel { timer_id } => {
@@ -132,7 +136,7 @@ pub fn main(cmd: cli::CliCommand) -> io::Result<()> {
                 Resp::Ok => {
                     println!("Cancelled timer {timer_id}.");
                     Ok(())
-                },
+                }
                 Resp::TimerNotFound => exit_timer_not_found(timer_id),
             }
         }

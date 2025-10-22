@@ -1,6 +1,6 @@
 use std::num::ParseIntError;
-use std::time::Duration;
 use std::str::FromStr;
+use std::time::Duration;
 
 pub trait DurationExt {
     fn format_colon_separated(&self) -> String;
@@ -74,7 +74,9 @@ impl std::error::Error for ParseDurationComponentError {
 
 pub fn parse_duration_component(component: &str) -> Result<Duration, ParseDurationComponentError> {
     use ParseDurationComponentError::*;
-    let split_point = component.find(|c: char| !c.is_digit(10)).unwrap_or(component.len());
+    let split_point = component
+        .find(|c: char| !c.is_digit(10))
+        .unwrap_or(component.len());
     let (count_str, unit_str) = component.split_at(split_point);
     let count = u64::from_str(count_str).map_err(|e| BadCount(e))?;
     let unit = TimeUnit::parse(unit_str).ok_or(BadUnit)?;

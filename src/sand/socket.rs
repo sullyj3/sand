@@ -1,9 +1,7 @@
 use std::path::PathBuf;
 
 pub fn env_sock_path() -> Option<PathBuf> {
-    std::env::var("SAND_SOCK_PATH")
-        .map(Into::into)
-        .ok()
+    std::env::var("SAND_SOCK_PATH").map(Into::into).ok()
 }
 
 pub fn default_sock_path() -> Option<PathBuf> {
