@@ -137,29 +137,30 @@ impl DaemonCtx {
     where
         S: Stream<Item = SuspendSignal> + Unpin,
     {
-        // TODO we can deduplicate these select!s by passing in the option that next_due_running returns
-        if let Some((timer_id, next_due)) = self.timers.next_due_running() {
-            tokio::select! {
-                Some(signal) = suspends_stream.next() =>
-                    handle_suspend_signal_awake_state(signal),
-
-                _ = self.refresh_next_due.notified() => KeepTimeState::Awake,
-                _ = tokio::time::sleep(next_due) => {
-                    // todo: just merge the ElapsedEvent handler task with this one
-                    self.tx_elapsed_events
-                        .send(ElapsedEvent(timer_id))
-                        .await
-                        .expect("elapsed event receiver was closed");
-                    log::info!("Timer {timer_id} completed");
-                    self.timers.remove(&timer_id);
-                    KeepTimeState::Awake
+        let next_due = self.timers.next_due_running();
+        let next_countdown = async move {
+            match next_due {
+                Some((timer_id, duration)) => {
+                    tokio::time::sleep(duration).await;
+                    Some(timer_id)
                 }
+                None => None,
             }
-        } else {
-            tokio::select! {
-                Some(signal) = suspends_stream.next() =>
-                    handle_suspend_signal_awake_state(signal),
-                _ = self.refresh_next_due.notified() => KeepTimeState::Awake,
+        };
+
+        tokio::select! {
+            _ = self.refresh_next_due.notified() => KeepTimeState::Awake,
+            Some(signal) = suspends_stream.next() =>
+                handle_suspend_signal_awake_state(signal),
+            Some(timer_id) = next_countdown => {
+                // todo: just merge the ElapsedEvent handler task with this one
+                self.tx_elapsed_events
+                    .send(ElapsedEvent(timer_id))
+                    .await
+                    .expect("elapsed event receiver was closed");
+                log::info!("Timer {timer_id} completed");
+                self.timers.remove(&timer_id);
+                KeepTimeState::Awake
             }
         }
     }
