@@ -4,6 +4,7 @@ use std::time::Instant;
 use std::time::SystemTime;
 
 use logind_zbus::manager::ManagerProxy;
+use logind_zbus::manager::PrepareForSleepStream;
 use tokio::sync::mpsc::Receiver;
 use tokio::sync::mpsc::Sender;
 use tokio::sync::Notify;
@@ -34,6 +35,14 @@ pub enum KeepTimeState {
     Sleeping,
 }
 
+async fn dbus_suspend_events() -> zbus::Result<PrepareForSleepStream> {
+    use zbus::Connection;
+    let connection = Connection::system().await?;
+    let manager = ManagerProxy::new(&connection).await?;
+
+    manager.receive_prepare_for_sleep().await
+}
+
 impl DaemonCtx {
     pub fn get_timerinfo_for_client(&self, now: Instant) -> Vec<TimerInfoForClient> {
         self.timers.get_timerinfo_for_client(now)
@@ -45,11 +54,7 @@ impl DaemonCtx {
     // - on wake, elapse and notify those that should have elapsed while asleep
     // - resume the time keeping task
     pub async fn monitor_dbus_suspend_events(&self) -> zbus::Result<()> {
-        use zbus::Connection;
-        let connection = Connection::system().await?;
-        let manager = ManagerProxy::new(&connection).await?;
-
-        let mut stream = manager.receive_prepare_for_sleep().await?;
+        let mut stream = dbus_suspend_events().await?;
 
         loop {
             //
