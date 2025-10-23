@@ -9,11 +9,15 @@ use crate::sand::timer::*;
 // own, because the timer ids can't be opaque - they're part of the UI.
 // eg `sand pause 1`
 #[derive(Default, Debug)]
-pub struct Timers(pub DashMap<TimerId, Timer>);
+pub struct Timers(DashMap<TimerId, Timer>);
 
 impl Timers {
     pub fn entry(&self, id: TimerId) -> Entry<'_, TimerId, Timer> {
         self.0.entry(id)
+    }
+
+    pub fn remove(&self, id: &TimerId) {
+        self.0.remove(id);
     }
 
     pub fn get_timerinfo_for_client(&self, now: Instant) -> Vec<TimerInfoForClient> {

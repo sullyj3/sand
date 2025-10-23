@@ -104,7 +104,7 @@ impl DaemonCtx {
             for (timer_id, remaining) in running_timers {
                 if remaining < sleep_duration {
                     // Handle timers that elapsed while the system was asleep
-                    self.timers.0.remove(&timer_id);
+                    self.timers.remove(&timer_id);
                     self.tx_elapsed_events
                         .send(ElapsedEvent(timer_id))
                         .await
