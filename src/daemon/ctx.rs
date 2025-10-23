@@ -126,40 +126,48 @@ impl DaemonCtx {
         let mut state = KeepTimeState::Awake;
 
         loop {
-            match state {
-                KeepTimeState::Sleeping => {
-                    state = rx_keep_time_state
-                        .recv()
-                        .await
-                        .expect("Bug: KeepTimeState channel closed");
-                }
-                KeepTimeState::Awake => {
-                    if let Some((timer_id, next_due)) = self.timers.next_due_running() {
-                        tokio::select! {
-                            Some(new_state) = rx_keep_time_state.recv() => {
-                                state = new_state;
-                            }
-                            _ = self.refresh_next_due.notified() => {},
-                            _ = tokio::time::sleep(next_due) => {
-                                // todo: just merge the ElapsedEvent handler task with this one
-                                self.tx_elapsed_events
-                                    .send(ElapsedEvent(timer_id))
-                                    .await
-                                    .expect("elapsed event receiver was closed");
-                                log::info!("Timer {timer_id} completed");
-                                self.timers.remove(&timer_id);
-                            }
-                        }
-                    } else {
-                        tokio::select! {
-                            Some(new_state) = rx_keep_time_state.recv() => {
-                                state = new_state;
-                            }
-                            _ = self.refresh_next_due.notified() => {},
+            state = match state {
+                KeepTimeState::Sleeping => self.handle_sleeping(&mut rx_keep_time_state).await,
+                KeepTimeState::Awake => self.handle_awake(&mut rx_keep_time_state).await,
+            };
+        }
+    }
 
-                        }
-                    }
+    async fn handle_sleeping(
+        &self,
+        rx_keep_time_state: &mut Receiver<KeepTimeState>,
+    ) -> KeepTimeState {
+        rx_keep_time_state
+            .recv()
+            .await
+            .expect("Bug: KeepTimeState channel closed")
+    }
+
+    async fn handle_awake(
+        &self,
+        rx_keep_time_state: &mut Receiver<KeepTimeState>,
+    ) -> KeepTimeState {
+        if let Some((timer_id, next_due)) = self.timers.next_due_running() {
+            tokio::select! {
+                Some(new_state) = rx_keep_time_state.recv() => new_state,
+
+                _ = self.refresh_next_due.notified() => KeepTimeState::Awake,
+                _ = tokio::time::sleep(next_due) => {
+                    // todo: just merge the ElapsedEvent handler task with this one
+                    self.tx_elapsed_events
+                        .send(ElapsedEvent(timer_id))
+                        .await
+                        .expect("elapsed event receiver was closed");
+                    log::info!("Timer {timer_id} completed");
+                    self.timers.remove(&timer_id);
+                    KeepTimeState::Awake
                 }
+            }
+        } else {
+            tokio::select! {
+                Some(new_state) = rx_keep_time_state.recv() => new_state,
+                _ = self.refresh_next_due.notified() => KeepTimeState::Awake,
+
             }
         }
     }
