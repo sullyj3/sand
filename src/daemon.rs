@@ -115,27 +115,16 @@ async fn daemon() -> io::Result<()> {
     let (tx_elapsed_events, rx_elapsed_events) = mpsc::channel(20);
     tokio::spawn(notifier_thread(rx_elapsed_events));
 
-    let (tx_keep_time_state, rx_keep_time_state) = mpsc::channel(1);
-
     let ctx = DaemonCtx {
         timers: Default::default(),
         tx_elapsed_events,
-        tx_keep_time_state,
         refresh_next_due: Arc::new(Notify::new()),
     };
 
-    // Handle system suspend
-    let s_ctx = ctx.clone();
-    tokio::spawn(async move {
-        if let Err(err) = s_ctx.monitor_dbus_suspend_events().await {
-            log::error!("Error monitoring PrepareForSleep signals: {err}");
-        }
-    });
-
-    // handle countdowns
+    // handle events
     let c_ctx = ctx.clone();
     tokio::spawn(async move {
-        c_ctx.handle_events(rx_keep_time_state).await;
+        c_ctx.handle_events().await;
     });
 
     // handle client connections

@@ -4,10 +4,9 @@ use std::time::Instant;
 use std::time::SystemTime;
 
 use logind_zbus::manager::ManagerProxy;
-use logind_zbus::manager::PrepareForSleepStream;
-use tokio::sync::mpsc::Receiver;
 use tokio::sync::mpsc::Sender;
 use tokio::sync::Notify;
+use tokio_stream::Stream;
 use tokio_stream::StreamExt;
 
 use crate::daemon::ElapsedEvent;
@@ -25,22 +24,45 @@ use crate::sand::timers::Timers;
 pub struct DaemonCtx {
     pub timers: Arc<Timers>,
     pub tx_elapsed_events: Sender<ElapsedEvent>,
-    pub tx_keep_time_state: Sender<KeepTimeState>,
     pub refresh_next_due: Arc<Notify>,
 }
 
 // Used to pause the time keeping task during suspend
 pub enum KeepTimeState {
     Awake,
-    Sleeping,
+    Sleeping { slept_at: SystemTime },
 }
 
-async fn dbus_suspend_events() -> zbus::Result<PrepareForSleepStream> {
+enum SuspendSignal {
+    Sleeping,
+    Waking,
+}
+
+async fn dbus_suspend_events() -> zbus::Result<impl Stream<Item = SuspendSignal>> {
     use zbus::Connection;
     let connection = Connection::system().await?;
     let manager = ManagerProxy::new(&connection).await?;
 
-    manager.receive_prepare_for_sleep().await
+    let stream = manager
+        .receive_prepare_for_sleep()
+        .await?
+        .filter_map(|signal| {
+            signal
+                .args()
+                .inspect_err(|err| {
+                    log::error!("Couldn't get args of PrepareForSleep signal: {err}");
+                })
+                .map(|args| {
+                    log::trace!("Received PrepareForSleep(start={})", args.start);
+                    if args.start {
+                        SuspendSignal::Sleeping
+                    } else {
+                        SuspendSignal::Waking
+                    }
+                })
+                .ok()
+        });
+    Ok(stream)
 }
 
 impl DaemonCtx {
@@ -48,112 +70,78 @@ impl DaemonCtx {
         self.timers.get_timerinfo_for_client(now)
     }
 
-    // Whenever the system goes to sleep we
-    // - pause the time keeping task
-    // - track how long we've been asleep
-    // - on wake, elapse and notify those that should have elapsed while asleep
-    // - resume the time keeping task
-    pub async fn monitor_dbus_suspend_events(&self) -> zbus::Result<()> {
-        let mut stream = dbus_suspend_events().await?;
-
-        loop {
-            //
-            // Handle Suspend
-            //
-            let Some(signal) = stream.next().await else {
-                break;
-            };
-            let start = signal.args()?.start;
-            log::trace!("Received PrepareForSleep(start={start})");
-            // Expect to suspend
-            if !start {
-                log::warn!("Received wake signal without preceding sleep. Ignoring.");
-                continue;
-            }
-            let slept_at = SystemTime::now();
-            if let Err(err) = self.tx_keep_time_state.send(KeepTimeState::Sleeping).await {
-                log::error!("Failed to send sleep state: {}", err);
-            }
-
-            log::info!("System is preparing to sleep.");
-
-            //
-            // Then Handle awake
-            //
-            let Some(signal) = stream.next().await else {
-                break;
-            };
-            let start = signal.args()?.start;
-            // Expect to wake
-            if start {
-                log::warn!("Received sleep signal again before waking. Ignoring");
-                continue;
-            }
-            let woke_at = SystemTime::now();
-            let sleep_duration = match woke_at.duration_since(slept_at) {
-                Ok(dur) => dur,
-                Err(err) => {
-                    log::error!("When waking, system clock reported having gone backwards in time since sleeping by {:?}. Assuming no time passed", err.duration());
-                    Duration::ZERO
-                }
-            };
-            log::info!("System just woke up. Slept for {:?}", sleep_duration);
-
-            let elapsed_while_sleeping = self.timers.awaken(sleep_duration);
-            if let Err(err) = self.tx_keep_time_state.send(KeepTimeState::Awake).await {
-                log::error!("Failed to send keep_time_state message: {}", err);
-            };
-            for timer_id in elapsed_while_sleeping {
-                self.tx_elapsed_events
-                    .send(ElapsedEvent(timer_id))
-                    .await
-                    .expect("elapsed event receiver was closed");
-            }
-        }
-
-        log::warn!(concat!(
-            "D-Bus connection was lost.\n",
-            "Sand will be unable to correctly handle system sleep."
-        ));
-
-        Ok(())
-    }
-
-    // TODO we can eliminate the keep_time_state channel and the monitor
-    // dbus_supend_events thread by just awaiting receive_prepare_for_sleep()
-    // in our select!
-
     // main worker task. handles:
     // - timer elapses
     // - system sleep and wake
-    pub async fn handle_events(&self, mut rx_keep_time_state: Receiver<KeepTimeState>) -> ! {
+    pub async fn handle_events(&self) -> ! {
         let mut state = KeepTimeState::Awake;
+        let suspends_stream = dbus_suspend_events().await.unwrap_or_else(|err| {
+            log::error!("Unable to receive D-Bus suspend events: {}", err);
+            std::process::exit(1);
+        });
+        tokio::pin!(suspends_stream);
 
         loop {
             state = match state {
-                KeepTimeState::Sleeping => self.handle_sleeping(&mut rx_keep_time_state).await,
-                KeepTimeState::Awake => self.handle_awake(&mut rx_keep_time_state).await,
+                KeepTimeState::Sleeping { slept_at } => {
+                    self.handle_sleeping_state(&mut suspends_stream, slept_at)
+                        .await
+                }
+                KeepTimeState::Awake => self.handle_awake_state(&mut suspends_stream).await,
             };
         }
     }
 
-    async fn handle_sleeping(
+    async fn handle_sleeping_state<S>(
         &self,
-        rx_keep_time_state: &mut Receiver<KeepTimeState>,
-    ) -> KeepTimeState {
-        rx_keep_time_state
-            .recv()
-            .await
-            .expect("Bug: KeepTimeState channel closed")
+        suspends_stream: &mut S,
+        slept_at: SystemTime,
+    ) -> KeepTimeState
+    where
+        S: Stream<Item = SuspendSignal> + Unpin,
+    {
+        let Some(signal) = suspends_stream.next().await else {
+            log::error!("D-Bus suspend event stream closed");
+            std::process::exit(1);
+        };
+
+        // expect to wake
+        let SuspendSignal::Waking = signal else {
+            log::warn!(
+                "Got notification that the system is about to sleep, but we're already sleeping. Ignoring."
+            );
+            return KeepTimeState::Sleeping { slept_at };
+        };
+
+        let woke_at = SystemTime::now();
+        let sleep_duration = match woke_at.duration_since(slept_at) {
+            Ok(dur) => dur,
+            Err(err) => {
+                log::error!("When waking, system clock reported having gone backwards in time since sleeping by {:?}. Assuming no time passed", err.duration());
+                Duration::ZERO
+            }
+        };
+        log::info!("System just woke up. Slept for {:?}", sleep_duration);
+
+        let elapsed_while_sleeping = self.timers.awaken(sleep_duration);
+        for timer_id in elapsed_while_sleeping {
+            self.tx_elapsed_events
+                .send(ElapsedEvent(timer_id))
+                .await
+                .expect("elapsed event receiver was closed");
+        }
+        KeepTimeState::Awake
     }
 
-    async fn handle_awake(
-        &self,
-        rx_keep_time_state: &mut Receiver<KeepTimeState>,
-    ) -> KeepTimeState {
+    async fn handle_awake_state<S>(&self, suspends_stream: &mut S) -> KeepTimeState
+    where
+        S: Stream<Item = SuspendSignal> + Unpin,
+    {
+        // TODO we can deduplicate these select!s by passing in the option that next_due_running returns
         if let Some((timer_id, next_due)) = self.timers.next_due_running() {
             tokio::select! {
-                Some(new_state) = rx_keep_time_state.recv() => new_state,
+                Some(signal) = suspends_stream.next() =>
+                    handle_suspend_signal_awake_state(signal),
 
                 _ = self.refresh_next_due.notified() => KeepTimeState::Awake,
                 _ = tokio::time::sleep(next_due) => {
@@ -169,9 +157,9 @@ impl DaemonCtx {
             }
         } else {
             tokio::select! {
-                Some(new_state) = rx_keep_time_state.recv() => new_state,
+                Some(signal) = suspends_stream.next() =>
+                    handle_suspend_signal_awake_state(signal),
                 _ = self.refresh_next_due.notified() => KeepTimeState::Awake,
-
             }
         }
     }
@@ -279,5 +267,28 @@ impl DaemonCtx {
         entry.remove();
         self.refresh_next_due.notify_one();
         Resp::Ok
+    }
+}
+
+// Whenever the system goes to sleep we
+// - stop counting down
+// - track how long we've been asleep
+// - on wake, elapse and notify those that should have elapsed while asleep
+// - resume counting down
+fn handle_suspend_signal_awake_state(signal: SuspendSignal) -> KeepTimeState {
+    // expect to sleep
+    match signal {
+        SuspendSignal::Waking => {
+            log::warn!(
+                "Got notification that the system is waking up, but we're already awake. Ignoring."
+            );
+            KeepTimeState::Awake
+        }
+        SuspendSignal::Sleeping => {
+            log::info!("System is preparing to sleep.");
+            KeepTimeState::Sleeping {
+                slept_at: SystemTime::now(),
+            }
+        }
     }
 }
