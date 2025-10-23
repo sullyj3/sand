@@ -13,6 +13,8 @@ use tokio_stream::StreamExt;
 use crate::daemon::ElapsedEvent;
 use crate::sand::duration::DurationExt;
 use crate::sand::message;
+use crate::sand::timer::PausedTimer;
+use crate::sand::timer::RunningTimer;
 use crate::sand::timer::Timer;
 use crate::sand::timer::TimerId;
 use crate::sand::timer::TimerInfoForClient;
@@ -117,7 +119,7 @@ impl DaemonCtx {
                         continue;
                     };
 
-                    let Timer::Running { due, countdown } = entry.get_mut() else {
+                    let Timer::Running(RunningTimer { due, countdown }) = entry.get_mut() else {
                         log::error!("Bug while resuming from sleep: tried to replace countdown of timer that wasn't running");
                         continue;
                     };
@@ -168,10 +170,10 @@ impl DaemonCtx {
         let id = *vacant.key();
 
         let (join_handle, notify_added) = self.spawn_countdown(id, duration);
-        vacant.insert(Timer::Running {
+        vacant.insert(Timer::Running(RunningTimer {
             due: now + duration,
             countdown: join_handle,
-        });
+        }));
         notify_added.notify_one();
         log::info!(
             "Started timer {} for {}",
@@ -192,10 +194,10 @@ impl DaemonCtx {
 
         use Timer as T;
         match timer {
-            T::Running { due, countdown } => {
+            T::Running(RunningTimer { due, countdown }) => {
                 countdown.abort();
                 let remaining = *due - now;
-                *timer = T::Paused { remaining };
+                *timer = T::Paused(PausedTimer { remaining });
                 log::info!(
                     "Paused timer {}, {} remaining",
                     id,
@@ -203,7 +205,7 @@ impl DaemonCtx {
                 );
                 Resp::Ok
             }
-            T::Paused { remaining: _ } => {
+            T::Paused(_) => {
                 log::error!("Timer {} is already paused", id);
                 Resp::AlreadyPaused
             }
@@ -221,24 +223,21 @@ impl DaemonCtx {
 
         use Timer as T;
         match timer {
-            T::Paused { remaining } => {
+            T::Paused(PausedTimer { remaining }) => {
                 let (join_handle, notify_added) = self.spawn_countdown(id, *remaining);
                 log::info!(
                     "Resumed timer {}, {} remaining",
                     id,
                     remaining.format_colon_separated()
                 );
-                *timer = T::Running {
+                *timer = T::Running(RunningTimer {
                     due: now + *remaining,
                     countdown: join_handle,
-                };
+                });
                 notify_added.notify_one();
                 Resp::Ok
             }
-            T::Running {
-                due: _,
-                countdown: _,
-            } => {
+            T::Running(_) => {
                 log::error!("Timer {} is already running", id);
                 Resp::AlreadyRunning
             }
@@ -254,14 +253,14 @@ impl DaemonCtx {
         };
         let timer = entry.get();
         match timer {
-            Timer::Paused { remaining } => {
+            Timer::Paused(PausedTimer { remaining }) => {
                 log::info!(
                     "Cancelled paused timer {} with {} remaining",
                     id,
                     remaining.format_colon_separated()
                 );
             }
-            Timer::Running { due, countdown } => {
+            Timer::Running(RunningTimer { due, countdown }) => {
                 let remaining = *due - now;
                 log::info!(
                     "Cancelled running timer {} with {} remaining",

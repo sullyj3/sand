@@ -47,7 +47,7 @@ impl Timers {
     pub fn cancel_running_countdowns(&self) -> Vec<(TimerId, Duration)> {
         let mut running_timers = Vec::with_capacity(self.0.len());
         for ref_multi in &self.0 {
-            if let Timer::Running { due, countdown } = ref_multi.value() {
+            if let Timer::Running(RunningTimer { due, countdown }) = ref_multi.value() {
                 countdown.abort();
                 let remaining: Duration = *due - Instant::now();
                 running_timers.push((*ref_multi.key(), remaining));

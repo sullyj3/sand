@@ -36,14 +36,20 @@ impl TimerId {
 }
 
 #[derive(Debug)]
+pub struct PausedTimer {
+    pub remaining: Duration,
+}
+
+#[derive(Debug)]
+pub struct RunningTimer {
+    pub due: Instant,
+    pub countdown: JoinHandle<()>,
+}
+
+#[derive(Debug)]
 pub enum Timer {
-    Paused {
-        remaining: Duration,
-    },
-    Running {
-        due: Instant,
-        countdown: JoinHandle<()>,
-    },
+    Paused(PausedTimer),
+    Running(RunningTimer),
 }
 
 #[derive(Debug, PartialEq, Serialize, Deserialize)]
@@ -62,8 +68,12 @@ pub struct TimerInfoForClient {
 impl TimerInfoForClient {
     pub fn new(id: TimerId, timer: &Timer, now: Instant) -> Self {
         let (state, remaining_millis) = match timer {
-            Timer::Paused { remaining } => (TimerState::Paused, remaining.as_millis() as u64),
-            Timer::Running { due, .. } => (TimerState::Running, (*due - now).as_millis() as u64),
+            Timer::Paused(PausedTimer { remaining }) => {
+                (TimerState::Paused, remaining.as_millis() as u64)
+            }
+            Timer::Running(RunningTimer { due, .. }) => {
+                (TimerState::Running, (*due - now).as_millis() as u64)
+            }
         };
         Self {
             id,
