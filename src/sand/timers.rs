@@ -20,6 +20,20 @@ impl Timers {
         self.0.remove(id);
     }
 
+    pub fn next_due_running(&self) -> Option<(TimerId, Duration)> {
+        let now = Instant::now();
+        self.0
+            .iter()
+            .filter_map(|rm| match rm.value() {
+                Timer::Running(running) => {
+                    let remaining = running.due - now;
+                    Some((*rm.key(), remaining))
+                }
+                Timer::Paused(_) => None,
+            })
+            .min_by_key(|&(_, duration)| duration)
+    }
+
     pub fn get_timerinfo_for_client(&self, now: Instant) -> Vec<TimerInfoForClient> {
         self.0
             .iter()
@@ -28,13 +42,6 @@ impl Timers {
                 TimerInfoForClient::new(*id, timer, now)
             })
             .collect()
-    }
-
-    pub(crate) fn elapse(&self, id: TimerId) {
-        let Entry::Occupied(occ) = self.0.entry(id) else {
-            unreachable!("BUG: tried to complete nonexistent timer #{id:?}");
-        };
-        occ.remove();
     }
 
     pub fn first_vacant_entry(&self) -> VacantEntry<'_, TimerId, Timer> {
@@ -46,17 +53,30 @@ impl Timers {
             .unwrap()
     }
 
-    // cancel countdown tasks for all running timers, returning a list of their
-    // ids and remaining durations
-    pub fn cancel_running_countdowns(&self) -> Vec<(TimerId, Duration)> {
-        let mut running_timers = Vec::with_capacity(self.0.len());
-        for ref_multi in &self.0 {
-            if let Timer::Running(RunningTimer { due, countdown }) = ref_multi.value() {
-                countdown.abort();
-                let remaining: Duration = *due - Instant::now();
-                running_timers.push((*ref_multi.key(), remaining));
+    // remove and return all running timers that should have elapsed while
+    // asleep, and deduct the sleep duration from the due time of the remaining
+    // running timers
+    pub fn awaken(&self, sleep_duration: Duration) -> Vec<TimerId> {
+        let mut elapsed_while_asleep = Vec::new();
+        let now = Instant::now();
+        for mut ref_mut_multi in self.0.iter_mut() {
+            let (timer_id, timer) = ref_mut_multi.pair_mut();
+            let Timer::Running(running) = timer else {
+                continue;
+            };
+
+            let before_remaining = running.due - now;
+            log::trace!("Before sleep, timer {timer_id} had {before_remaining:?} remaining.");
+            running.due -= sleep_duration;
+            let after_remaining = running.due - now;
+            log::trace!("After sleep, timer {timer_id} has {after_remaining:?} remaining.");
+            if running.due <= now {
+                elapsed_while_asleep.push(*timer_id);
             }
         }
-        running_timers
+        for timer_id in &elapsed_while_asleep {
+            self.remove(timer_id);
+        }
+        elapsed_while_asleep
     }
 }

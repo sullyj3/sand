@@ -9,10 +9,12 @@ use std::os::fd::RawFd;
 use std::os::unix;
 use std::os::unix::fs::FileTypeExt;
 use std::path::PathBuf;
+use std::sync::Arc;
 use tokio;
 use tokio::net::UnixListener;
 use tokio::sync::mpsc;
 use tokio::sync::mpsc::Receiver;
+use tokio::sync::Notify;
 
 use crate::cli;
 use crate::sand::audio::ElapsedSoundPlayer;
@@ -98,12 +100,6 @@ fn get_socket() -> io::Result<UnixListener> {
         })
 }
 
-// TODO: I think we can refactor the waiting to be a single task instead of an
-// individual one for each timer. We can store all timers in order of next due,
-// and use select! to simultaneously wait for the next due timer elapse or a
-// Notify that's triggered whenever a timer is added. The notify would prompt
-// us to re-check the new next due timer in case the newly added timer has a
-// shorter duration than the current next due timer.
 async fn daemon() -> io::Result<()> {
     // Logging
     let mut log_builder = colog::default_builder();
@@ -119,9 +115,13 @@ async fn daemon() -> io::Result<()> {
     let (tx_elapsed_events, rx_elapsed_events) = mpsc::channel(20);
     tokio::spawn(notifier_thread(rx_elapsed_events));
 
+    let (tx_keep_time_state, rx_keep_time_state) = mpsc::channel(1);
+
     let ctx = DaemonCtx {
         timers: Default::default(),
         tx_elapsed_events,
+        tx_keep_time_state,
+        refresh_next_due: Arc::new(Notify::new()),
     };
 
     // Handle system suspend
@@ -130,6 +130,12 @@ async fn daemon() -> io::Result<()> {
         if let Err(err) = s_ctx.monitor_dbus_suspend_events().await {
             log::error!("Error monitoring PrepareForSleep signals: {err}");
         }
+    });
+
+    // handle countdowns
+    let c_ctx = ctx.clone();
+    tokio::spawn(async move {
+        c_ctx.keep_time(rx_keep_time_state).await;
     });
 
     // handle client connections
