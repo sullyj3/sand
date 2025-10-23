@@ -122,7 +122,11 @@ impl DaemonCtx {
     // TODO we can eliminate the keep_time_state channel and the monitor
     // dbus_supend_events thread by just awaiting receive_prepare_for_sleep()
     // in our select!
-    pub async fn keep_time(&self, mut rx_keep_time_state: Receiver<KeepTimeState>) -> ! {
+
+    // main worker task. handles:
+    // - timer elapses
+    // - system sleep and wake
+    pub async fn handle_events(&self, mut rx_keep_time_state: Receiver<KeepTimeState>) -> ! {
         let mut state = KeepTimeState::Awake;
 
         loop {

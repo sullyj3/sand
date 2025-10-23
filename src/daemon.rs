@@ -135,7 +135,7 @@ async fn daemon() -> io::Result<()> {
     // handle countdowns
     let c_ctx = ctx.clone();
     tokio::spawn(async move {
-        c_ctx.keep_time(rx_keep_time_state).await;
+        c_ctx.handle_events(rx_keep_time_state).await;
     });
 
     // handle client connections
