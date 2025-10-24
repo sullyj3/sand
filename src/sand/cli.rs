@@ -11,6 +11,7 @@ pub struct DaemonArgs {}
 #[command(
     name = "sand",
     about = "Command line countdown timers that don't take up a terminal.",
+    infer_subcommands = true,
     version
 )]
 pub struct Cli {
