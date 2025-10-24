@@ -153,7 +153,6 @@ impl DaemonCtx {
             Some(signal) = suspends_stream.next() =>
                 handle_suspend_signal_awake_state(signal),
             Some(timer_id) = next_countdown => {
-                // todo: just merge the ElapsedEvent handler task with this one
                 self.tx_elapsed_events
                     .send(ElapsedEvent(timer_id))
                     .await
