@@ -56,7 +56,8 @@ fn xdg_sand_data_dir() -> Option<PathBuf> {
 }
 
 fn xdg_sound_path() -> Option<PathBuf> {
-    Some(xdg_sand_data_dir()?.join(SOUND_FILENAME))
+    let path = xdg_sand_data_dir()?.join(SOUND_FILENAME);
+    Some(path)
 }
 
 fn default_sound_path() -> PathBuf {
@@ -73,11 +74,16 @@ fn default_sound_path() -> PathBuf {
 
 fn load_elapsed_sound() -> io::Result<SoundHandle> {
     if let Some(xdg_path) = xdg_sound_path() {
-        let sound = SoundHandle::load(xdg_path);
+        log::debug!("Attempting to load sound from {}", xdg_path.display());
+        let sound = SoundHandle::load(&xdg_path);
         if sound.is_ok() {
+            log::info!("Loaded sound from {}", xdg_path.display());
             return sound;
         }
+    } else {
+        log::debug!("xdg_sound_path() returned None");
     }
+    log::debug!("Attempting to load sound from default path");
     SoundHandle::load(default_sound_path())
 }
 
