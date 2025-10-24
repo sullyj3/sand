@@ -7,7 +7,6 @@ use crate::sand;
 #[derive(Args, Clone)]
 pub struct DaemonArgs {}
 
-// TODO: make default command configurable. consult jj source
 #[derive(Parser)]
 #[command(
     name = "sand",
