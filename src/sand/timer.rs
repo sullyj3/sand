@@ -4,7 +4,6 @@ use std::{
 };
 
 use serde::{Deserialize, Serialize};
-use tokio::task::JoinHandle;
 
 use crate::sand::duration::DurationExt;
 
@@ -43,7 +42,6 @@ pub struct PausedTimer {
 #[derive(Debug)]
 pub struct RunningTimer {
     pub due: Instant,
-    pub countdown: JoinHandle<()>,
 }
 
 #[derive(Debug)]

@@ -3,11 +3,10 @@ use std::time::Duration;
 use std::time::Instant;
 use std::time::SystemTime;
 
-use dashmap::Entry;
 use logind_zbus::manager::ManagerProxy;
 use tokio::sync::mpsc::Sender;
 use tokio::sync::Notify;
-use tokio::task::JoinHandle;
+use tokio_stream::Stream;
 use tokio_stream::StreamExt;
 
 use crate::daemon::ElapsedEvent;
@@ -25,6 +24,45 @@ use crate::sand::timers::Timers;
 pub struct DaemonCtx {
     pub timers: Arc<Timers>,
     pub tx_elapsed_events: Sender<ElapsedEvent>,
+    pub refresh_next_due: Arc<Notify>,
+}
+
+// Used to pause the time keeping task during suspend
+pub enum KeepTimeState {
+    Awake,
+    Sleeping { slept_at: SystemTime },
+}
+
+enum SuspendSignal {
+    Sleeping,
+    Waking,
+}
+
+async fn dbus_suspend_events() -> zbus::Result<impl Stream<Item = SuspendSignal>> {
+    use zbus::Connection;
+    let connection = Connection::system().await?;
+    let manager = ManagerProxy::new(&connection).await?;
+
+    let stream = manager
+        .receive_prepare_for_sleep()
+        .await?
+        .filter_map(|signal| {
+            signal
+                .args()
+                .inspect_err(|err| {
+                    log::error!("Couldn't get args of PrepareForSleep signal: {err}");
+                })
+                .map(|args| {
+                    log::trace!("Received PrepareForSleep(start={})", args.start);
+                    if args.start {
+                        SuspendSignal::Sleeping
+                    } else {
+                        SuspendSignal::Waking
+                    }
+                })
+                .ok()
+        });
+    Ok(stream)
 }
 
 impl DaemonCtx {
@@ -32,149 +70,108 @@ impl DaemonCtx {
         self.timers.get_timerinfo_for_client(now)
     }
 
-    async fn countdown(self, id: TimerId, duration: Duration, rx_added: Arc<Notify>) {
-        tokio::time::sleep(duration).await;
-        log::info!("Timer {id} completed");
-
-        self.tx_elapsed_events
-            .send(ElapsedEvent(id))
-            .await
-            .expect("elapsed event receiver was closed");
-        // Since the countdown is started concurrently with adding the timer to
-        // the map, we need to ensure that it has been added before we remove
-        // it, in case the duration of the countdown is short or 0.
-        rx_added.notified().await;
-        self.timers.elapse(id)
-    }
-
-    // Whenever the system goes to sleep we
-    // - cancel all async countdown tasks
-    // - record running timers' remaining durations
-    // - on wake, elapse and notify those that should have elapsed while asleep
-    // - spawn new countdowns for the remaining duration before sleep less the sleep duration
-    pub async fn monitor_dbus_suspend_events(&self) -> zbus::Result<()> {
-        use zbus::Connection;
-        let connection = Connection::system().await?;
-        let manager = ManagerProxy::new(&connection).await?;
-
-        let mut stream = manager.receive_prepare_for_sleep().await?;
+    // main worker task. handles:
+    // - timer elapses
+    // - system sleep and wake
+    pub async fn handle_events(&self) -> ! {
+        let mut state = KeepTimeState::Awake;
+        let suspends_stream = dbus_suspend_events().await.unwrap_or_else(|err| {
+            log::error!("Unable to receive D-Bus suspend events: {}", err);
+            std::process::exit(1);
+        });
+        tokio::pin!(suspends_stream);
 
         loop {
-            //
-            // Handle Suspend
-            //
-            let Some(signal) = stream.next().await else {
-                break;
-            };
-            let start = signal.args()?.start;
-            log::trace!("Received PrepareForSleep(start={start})");
-            // Expect to suspend
-            if !start {
-                log::warn!("Received wake signal without preceding sleep. Ignoring.");
-                continue;
-            }
-            let slept_at = SystemTime::now();
-            log::info!("System is preparing to sleep.");
-            let running_timers: Vec<(TimerId, Duration)> = self.timers.cancel_running_countdowns();
-
-            //
-            // Then Handle awake
-            //
-            let Some(signal) = stream.next().await else {
-                break;
-            };
-            let start = signal.args()?.start;
-            // Expect to wake
-            if start {
-                log::warn!("Received sleep signal again before waking. Ignoring");
-                continue;
-            }
-            let woke_at_sys = SystemTime::now();
-            let sleep_duration = match woke_at_sys.duration_since(slept_at) {
-                Ok(dur) => dur,
-                Err(err) => {
-                    log::error!("When waking, system clock reported having gone backwards in time since sleeping by {:?}. Assuming no time passed", err.duration());
-                    Duration::ZERO
-                }
-            };
-            log::info!("System just woke up. Slept for {:?}", sleep_duration);
-            let woke_at = Instant::now();
-
-            // resume or elapse all running timers
-            for (timer_id, remaining) in running_timers {
-                if remaining < sleep_duration {
-                    // Handle timers that elapsed while the system was asleep
-                    self.timers.remove(&timer_id);
-                    self.tx_elapsed_events
-                        .send(ElapsedEvent(timer_id))
+            state = match state {
+                KeepTimeState::Sleeping { slept_at } => {
+                    self.handle_sleeping_state(&mut suspends_stream, slept_at)
                         .await
-                        .expect("elapsed event receiver was closed");
-                } else {
-                    // Handle timers that still have remaining time
-                    let new_duration = remaining - sleep_duration;
-                    let new_due = woke_at + new_duration;
-
-                    let Entry::Occupied(mut entry) = self.timers.entry(timer_id) else {
-                        log::error!("Bug while resuming from sleep: tried to replace countdown of nonexistent timer");
-                        continue;
-                    };
-
-                    let Timer::Running(RunningTimer { due, countdown }) = entry.get_mut() else {
-                        log::error!("Bug while resuming from sleep: tried to replace countdown of timer that wasn't running");
-                        continue;
-                    };
-
-                    let (new_countdown, notify_added) =
-                        self.spawn_countdown(timer_id, new_duration);
-                    *due = new_due;
-                    *countdown = new_countdown;
-                    notify_added.notify_one();
                 }
-            }
+                KeepTimeState::Awake => self.handle_awake_state(&mut suspends_stream).await,
+            };
         }
-
-        log::warn!(concat!(
-            "D-Bus connection was lost.\n",
-            "Sand will be unable to correctly handle system sleep."
-        ));
-
-        Ok(())
     }
 
-    fn spawn_countdown(&self, id: TimerId, duration: Duration) -> (JoinHandle<()>, Arc<Notify>) {
-        // Once the countdown has elapsed, it removes its associated `Timer`
-        // from the Timers map by calling `timers.elapse(id)`. For short
-        // durations (eg 0), We need to synchronize to ensure it doesn't do
-        // this til after it's been added. This is what `notify_added` is for.
+    async fn handle_sleeping_state<S>(
+        &self,
+        suspends_stream: &mut S,
+        slept_at: SystemTime,
+    ) -> KeepTimeState
+    where
+        S: Stream<Item = SuspendSignal> + Unpin,
+    {
+        let Some(signal) = suspends_stream.next().await else {
+            log::error!("D-Bus suspend event stream closed");
+            std::process::exit(1);
+        };
 
-        // I'm not thrilled with the `Notify` based solution, it feels a little
-        // awkward. I'm not sure whether there's a better way.
+        // expect to wake
+        let SuspendSignal::Waking = signal else {
+            log::warn!(
+                "Got notification that the system is about to sleep, but we're already sleeping. Ignoring."
+            );
+            return KeepTimeState::Sleeping { slept_at };
+        };
 
-        // this seems like exactly the sort of thing `waitmap` was designed for,
-        // but it looks unmaintained
+        let woke_at = SystemTime::now();
+        let sleep_duration = match woke_at.duration_since(slept_at) {
+            Ok(dur) => dur,
+            Err(err) => {
+                log::error!("When waking, system clock reported having gone backwards in time since sleeping by {:?}. Assuming no time passed", err.duration());
+                Duration::ZERO
+            }
+        };
+        log::info!("System just woke up. Slept for {:?}", sleep_duration);
 
-        // Possibly we could have the countdown notify some central thread that
-        // it's done through a chan. Then the central thread could instead be
-        // responsible for doing the notification, playing the sound and removing
-        // the elapsed timer from the map. It's not obvious to me whether that
-        // would be simpler. The central thread would still have to somehow
-        // wait for the timer to be added before removing it.
-        let notify_added = Arc::new(Notify::new());
-        let rx_added = notify_added.clone();
-        let join_handle = tokio::spawn(self.clone().countdown(id, duration, rx_added));
-        (join_handle, notify_added)
+        let elapsed_while_sleeping = self.timers.awaken(sleep_duration);
+        for timer_id in elapsed_while_sleeping {
+            self.tx_elapsed_events
+                .send(ElapsedEvent(timer_id))
+                .await
+                .expect("elapsed event receiver was closed");
+        }
+        KeepTimeState::Awake
+    }
+
+    async fn handle_awake_state<S>(&self, suspends_stream: &mut S) -> KeepTimeState
+    where
+        S: Stream<Item = SuspendSignal> + Unpin,
+    {
+        let next_due = self.timers.next_due_running();
+        let next_countdown = async move {
+            match next_due {
+                Some((timer_id, duration)) => {
+                    tokio::time::sleep(duration).await;
+                    Some(timer_id)
+                }
+                None => None,
+            }
+        };
+
+        tokio::select! {
+            _ = self.refresh_next_due.notified() => KeepTimeState::Awake,
+            Some(signal) = suspends_stream.next() =>
+                handle_suspend_signal_awake_state(signal),
+            Some(timer_id) = next_countdown => {
+                self.tx_elapsed_events
+                    .send(ElapsedEvent(timer_id))
+                    .await
+                    .expect("elapsed event receiver was closed");
+                log::info!("Timer {timer_id} completed");
+                self.timers.remove(&timer_id);
+                KeepTimeState::Awake
+            }
+        }
     }
 
     pub fn add_timer(&self, now: Instant, duration: Duration) -> TimerId {
         let vacant = self.timers.first_vacant_entry();
         let id = *vacant.key();
 
-        let (join_handle, notify_added) = self.spawn_countdown(id, duration);
         vacant.insert(Timer::Running(RunningTimer {
             due: now + duration,
-            countdown: join_handle,
         }));
-        notify_added.notify_one();
+        self.refresh_next_due.notify_one();
         log::info!(
             "Started timer {} for {}",
             id,
@@ -194,10 +191,10 @@ impl DaemonCtx {
 
         use Timer as T;
         match timer {
-            T::Running(RunningTimer { due, countdown }) => {
-                countdown.abort();
+            T::Running(RunningTimer { due }) => {
                 let remaining = *due - now;
                 *timer = T::Paused(PausedTimer { remaining });
+                self.refresh_next_due.notify_one();
                 log::info!(
                     "Paused timer {}, {} remaining",
                     id,
@@ -224,7 +221,6 @@ impl DaemonCtx {
         use Timer as T;
         match timer {
             T::Paused(PausedTimer { remaining }) => {
-                let (join_handle, notify_added) = self.spawn_countdown(id, *remaining);
                 log::info!(
                     "Resumed timer {}, {} remaining",
                     id,
@@ -232,9 +228,8 @@ impl DaemonCtx {
                 );
                 *timer = T::Running(RunningTimer {
                     due: now + *remaining,
-                    countdown: join_handle,
                 });
-                notify_added.notify_one();
+                self.refresh_next_due.notify_one();
                 Resp::Ok
             }
             T::Running(_) => {
@@ -260,17 +255,40 @@ impl DaemonCtx {
                     remaining.format_colon_separated()
                 );
             }
-            Timer::Running(RunningTimer { due, countdown }) => {
+            Timer::Running(RunningTimer { due }) => {
                 let remaining = *due - now;
                 log::info!(
                     "Cancelled running timer {} with {} remaining",
                     id,
                     remaining.format_colon_separated()
                 );
-                countdown.abort()
             }
         }
         entry.remove();
+        self.refresh_next_due.notify_one();
         Resp::Ok
+    }
+}
+
+// Whenever the system goes to sleep we
+// - stop counting down
+// - track how long we've been asleep
+// - on wake, elapse and notify those that should have elapsed while asleep
+// - resume counting down
+fn handle_suspend_signal_awake_state(signal: SuspendSignal) -> KeepTimeState {
+    // expect to sleep
+    match signal {
+        SuspendSignal::Waking => {
+            log::warn!(
+                "Got notification that the system is waking up, but we're already awake. Ignoring."
+            );
+            KeepTimeState::Awake
+        }
+        SuspendSignal::Sleeping => {
+            log::info!("System is preparing to sleep.");
+            KeepTimeState::Sleeping {
+                slept_at: SystemTime::now(),
+            }
+        }
     }
 }
