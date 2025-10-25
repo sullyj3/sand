@@ -130,46 +130,52 @@ pub fn main(cmd: cli::CliCommand) -> io::Result<()> {
             println!("{}", display_timer_info(timers));
             Ok(())
         }
-        cli::CliCommand::Pause { timer_id } => {
-            conn.send(Command::PauseTimer(timer_id))?;
-            match conn.recv::<PauseTimerResponse>()? {
-                PauseTimerResponse::Ok => {
-                    println!("Paused timer {timer_id}.");
-                    Ok(())
-                }
-                PauseTimerResponse::TimerNotFound => exit_timer_not_found(timer_id),
-                PauseTimerResponse::AlreadyPaused => {
-                    println!("Timer {timer_id} is already paused.");
-                    exit(1);
-                }
-            }
-        }
-        cli::CliCommand::Resume { timer_id } => {
-            conn.send(Command::ResumeTimer(timer_id))?;
-            use ResumeTimerResponse as Resp;
-            match conn.recv::<ResumeTimerResponse>()? {
-                Resp::Ok => {
-                    println!("Resumed timer {timer_id}.");
-                    Ok(())
-                }
-                Resp::TimerNotFound => exit_timer_not_found(timer_id),
-                Resp::AlreadyRunning => {
-                    println!("Timer {timer_id} is already running.");
-                    exit(1);
-                }
-            }
-        }
-        cli::CliCommand::Cancel { timer_id } => {
-            conn.send(Command::CancelTimer(timer_id))?;
-            use message::CancelTimerResponse as Resp;
-            match conn.recv::<Resp>()? {
-                Resp::Ok => {
-                    println!("Cancelled timer {timer_id}.");
-                    Ok(())
-                }
-                Resp::TimerNotFound => exit_timer_not_found(timer_id),
-            }
-        }
+        cli::CliCommand::Pause { timer_id } => pause(&mut conn, timer_id),
+        cli::CliCommand::Resume { timer_id } => resume(&mut conn, timer_id),
+        cli::CliCommand::Cancel { timer_id } => cancel(&mut conn, timer_id),
         cli::CliCommand::Daemon(_) => unreachable!("handled in top level main"),
+    }
+}
+
+fn pause(conn: &mut DaemonConnection, timer_id: TimerId) -> Result<(), io::Error> {
+    conn.send(Command::PauseTimer(timer_id))?;
+    match conn.recv::<PauseTimerResponse>()? {
+        PauseTimerResponse::Ok => {
+            println!("Paused timer {timer_id}.");
+            Ok(())
+        }
+        PauseTimerResponse::TimerNotFound => exit_timer_not_found(timer_id),
+        PauseTimerResponse::AlreadyPaused => {
+            println!("Timer {timer_id} is already paused.");
+            exit(1);
+        }
+    }
+}
+
+fn resume(conn: &mut DaemonConnection, timer_id: TimerId) -> Result<(), io::Error> {
+    conn.send(Command::ResumeTimer(timer_id))?;
+    use ResumeTimerResponse as Resp;
+    match conn.recv::<ResumeTimerResponse>()? {
+        Resp::Ok => {
+            println!("Resumed timer {timer_id}.");
+            Ok(())
+        }
+        Resp::TimerNotFound => exit_timer_not_found(timer_id),
+        Resp::AlreadyRunning => {
+            println!("Timer {timer_id} is already running.");
+            exit(1);
+        }
+    }
+}
+
+fn cancel(conn: &mut DaemonConnection, timer_id: TimerId) -> Result<(), io::Error> {
+    conn.send(Command::CancelTimer(timer_id))?;
+    use message::CancelTimerResponse as Resp;
+    match conn.recv::<Resp>()? {
+        Resp::Ok => {
+            println!("Cancelled timer {timer_id}.");
+            Ok(())
+        }
+        Resp::TimerNotFound => exit_timer_not_found(timer_id),
     }
 }
