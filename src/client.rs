@@ -101,7 +101,7 @@ pub fn main(cmd: cli::CliCommand) -> io::Result<()> {
         std::process::exit(1)
     };
 
-    let mut conn = match DaemonConnection::new(sock_path) {
+    let conn = match DaemonConnection::new(sock_path) {
         Ok(conn) => conn,
         Err(e) => {
             eprintln!("Error establishing connection with daemon: {e}");
@@ -109,6 +109,10 @@ pub fn main(cmd: cli::CliCommand) -> io::Result<()> {
         }
     };
 
+    handle_command(cmd, conn)
+}
+
+fn handle_command(cmd: cli::CliCommand, mut conn: DaemonConnection) -> io::Result<()> {
     // TODO: make sure to parse Error Messages. we should prob move sending,
     // receiving, and parsing fully into DaemonConnection, and present
     // Command -> Result<CmdResponse, Error> type api
