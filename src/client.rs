@@ -128,9 +128,46 @@ fn handle_command(cmd: cli::CliCommand, mut conn: DaemonConnection) -> io::Resul
             print!("{}", display_timer_info(timers));
             Ok(())
         }
-        cli::CliCommand::Pause { timer_id } => pause(&mut conn, timer_id),
-        cli::CliCommand::Resume { timer_id } => resume(&mut conn, timer_id),
-        cli::CliCommand::Cancel { timer_id } => cancel(&mut conn, timer_id),
+        cli::CliCommand::Pause { timer_ids } => {
+            // TODO: support passing multiple IDs in protocol
+            // we run all commands unconditionally, regardless of whether earlier ones failed
+            // we're just trying to return nonzero exit status, we've already reported errors
+            // so we don't need to keep all the errors. we just fail if any of them fail
+            timer_ids
+                .iter()
+                .map(|id| pause(&mut conn, *id))
+                .fold(Ok(()), |acc, next| acc.and(next))
+        }
+        cli::CliCommand::Resume { timer_ids } => {
+            // TODO: support passing multiple IDs in protocol
+            // we run all commands unconditionally, regardless of whether earlier ones failed
+            let results: Vec<io::Result<()>> =
+                timer_ids.iter().map(|id| resume(&mut conn, *id)).collect();
+            // we're just trying to return nonzero exit status, we've already reported errors
+            // so we don't need to keep all the errors. we just fail if any of them fail
+            // TODO there's got to be a better way to do this
+            for result in results {
+                if result.is_err() {
+                    return result;
+                }
+            }
+            Ok(())
+        }
+        cli::CliCommand::Cancel { timer_ids } => {
+            // TODO: support passing multiple IDs in protocol
+            // we run all commands unconditionally, regardless of whether earlier ones failed
+            let results: Vec<io::Result<()>> =
+                timer_ids.iter().map(|id| cancel(&mut conn, *id)).collect();
+            // we're just trying to return nonzero exit status, we've already reported errors
+            // so we don't need to keep all the errors. we just fail if any of them fail
+            // TODO there's got to be a better way to do this
+            for result in results {
+                if result.is_err() {
+                    return result;
+                }
+            }
+            Ok(())
+        }
         cli::CliCommand::Daemon(_) => unreachable!("handled in top level main"),
     }
 }
