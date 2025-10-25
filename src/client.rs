@@ -48,9 +48,15 @@ fn display_timer_info(timers: &[TimerInfoForClient]) -> String {
     if timers.len() == 0 {
         "No timers running.".into()
     } else {
+        let max_id = timers
+            .iter()
+            .map(|ti| ti.id)
+            .max()
+            .expect("timers.len() != 0");
+        let first_column_width = max_id.to_string().len();
         timers
             .iter()
-            .map(TimerInfoForClient::display)
+            .map(|ti| ti.display(first_column_width))
             .intersperse("\n".to_string())
             .collect()
     }

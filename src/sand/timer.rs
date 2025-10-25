@@ -7,7 +7,7 @@ use serde::{Deserialize, Serialize};
 
 use crate::sand::duration::DurationExt;
 
-#[derive(PartialEq, Eq, Hash, Debug, Clone, Copy, Serialize, Deserialize)]
+#[derive(PartialEq, Eq, PartialOrd, Ord, Hash, Debug, Clone, Copy, Serialize, Deserialize)]
 pub struct TimerId(pub u64);
 
 impl Default for TimerId {
@@ -58,9 +58,9 @@ pub enum TimerState {
 
 #[derive(Debug, PartialEq, Serialize, Deserialize)]
 pub struct TimerInfoForClient {
-    id: TimerId,
-    state: TimerState,
-    remaining_millis: u64,
+    pub id: TimerId,
+    pub state: TimerState,
+    pub remaining_millis: u64,
 }
 
 impl TimerInfoForClient {
@@ -80,7 +80,7 @@ impl TimerInfoForClient {
         }
     }
 
-    pub fn display(&self) -> String {
+    pub fn display(&self, first_column_width: usize) -> String {
         let remaining: String =
             Duration::from_millis(self.remaining_millis).format_colon_separated();
         let id = self.id;
@@ -91,6 +91,10 @@ impl TimerInfoForClient {
         } else {
             NOT_PAUSED
         };
-        format!("{id} | {remaining}{maybe_paused}")
+        format!(
+            "{:>width$} | {remaining}{maybe_paused}",
+            id.to_string(),
+            width = first_column_width
+        )
     }
 }
