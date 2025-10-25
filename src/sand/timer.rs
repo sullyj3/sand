@@ -85,15 +85,12 @@ impl TimerInfoForClient {
         let remaining: String =
             Duration::from_millis(self.remaining_millis).format_colon_separated();
         let id = self.id;
-        const PAUSED: &'static str = " (PAUSED)";
-        const NOT_PAUSED: &'static str = "";
-        let maybe_paused = if self.state == TimerState::Paused {
-            PAUSED
-        } else {
-            NOT_PAUSED
+        let play_pause = match self.state {
+            TimerState::Paused => " ⏸ ",
+            TimerState::Running => " ▶ ",
         };
         format!(
-            "{:>width$} | {remaining}{maybe_paused}",
+            "{play_pause} │ {:>width$} │ {remaining}",
             id.to_string(),
             width = first_column_width
         )

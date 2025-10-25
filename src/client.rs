@@ -49,33 +49,6 @@ fn display_timer_info(mut timers: Vec<TimerInfoForClient>) -> String {
         return "There are currently no timers.".into();
     };
 
-    let mut output = String::new();
-
-    timers.sort_by(TimerInfoForClient::cmp_by_next_due);
-    let (running, paused): (Vec<_>, Vec<_>) = timers
-        .iter()
-        .partition(|ti| ti.state == TimerState::Running);
-
-    output.push_str("Running timers:\n");
-    if running.len() > 0 {
-        display_timer_info_table(&mut output, &running);
-    } else {
-        output.push_str("  None.\n");
-    }
-
-    output.push_str("Paused timers:\n");
-    if paused.len() > 0 {
-        display_timer_info_table(&mut output, &paused);
-    } else {
-        output.push_str("  None.\n");
-    }
-
-    output
-}
-
-// Used separately for running and paused timers
-// timers must be nonempty
-fn display_timer_info_table(output: &mut String, timers: &[&TimerInfoForClient]) -> () {
     let first_column_width = {
         let max_id = timers
             .iter()
@@ -85,6 +58,31 @@ fn display_timer_info_table(output: &mut String, timers: &[&TimerInfoForClient])
         max_id.to_string().len()
     };
 
+    let mut output = String::new();
+
+    timers.sort_by(TimerInfoForClient::cmp_by_next_due);
+    let (running, paused): (Vec<_>, Vec<_>) = timers
+        .iter()
+        .partition(|ti| ti.state == TimerState::Running);
+
+    if running.len() > 0 {
+        display_timer_info_table(&mut output, first_column_width, &running);
+    }
+    output.push_str("\n");
+    if paused.len() > 0 {
+        display_timer_info_table(&mut output, first_column_width, &paused);
+    }
+
+    output
+}
+
+// Used separately for running and paused timers
+// timers must be nonempty
+fn display_timer_info_table(
+    output: &mut String,
+    first_column_width: usize,
+    timers: &[&TimerInfoForClient],
+) -> () {
     for timer in timers {
         output.push_str(&timer.display(first_column_width));
         output.push('\n');

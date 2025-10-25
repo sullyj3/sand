@@ -111,7 +111,7 @@ class TestClient:
     def test_list_none(self, daemon):
         (status, output) = run_client(SOCKET_PATH, ["list"])
         assert status == 0, f"Client exited with status {status}"
-        expected_stdout = "No timers running."
+        expected_stdout = "There are currently no timers."
         assert output.strip() == expected_stdout
 
     def test_add(self, daemon):
