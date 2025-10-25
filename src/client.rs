@@ -49,6 +49,11 @@ fn display_timer_info(mut timers: Vec<TimerInfoForClient>) -> String {
         return "There are currently no timers.".into();
     };
 
+    timers.sort_by(TimerInfoForClient::cmp_by_next_due);
+    let (running, paused): (Vec<_>, Vec<_>) = timers
+        .iter()
+        .partition(|ti| ti.state == TimerState::Running);
+
     let first_column_width = {
         let max_id = timers
             .iter()
@@ -57,18 +62,13 @@ fn display_timer_info(mut timers: Vec<TimerInfoForClient>) -> String {
             .expect("timers.len() != 0");
         max_id.to_string().len()
     };
-
     let mut output = String::new();
-
-    timers.sort_by(TimerInfoForClient::cmp_by_next_due);
-    let (running, paused): (Vec<_>, Vec<_>) = timers
-        .iter()
-        .partition(|ti| ti.state == TimerState::Running);
-
     if running.len() > 0 {
         display_timer_info_table(&mut output, first_column_width, &running);
+        if paused.len() > 0 {
+            output.push_str("\n");
+        }
     }
-    output.push_str("\n");
     if paused.len() > 0 {
         display_timer_info_table(&mut output, first_column_width, &paused);
     }
@@ -131,7 +131,7 @@ fn handle_command(cmd: cli::CliCommand, mut conn: DaemonConnection) -> io::Resul
         cli::CliCommand::Ls => {
             conn.send(Command::List)?;
             let ListResponse::Ok { timers } = conn.recv::<ListResponse>()?;
-            println!("{}", display_timer_info(timers));
+            print!("{}", display_timer_info(timers));
             Ok(())
         }
         cli::CliCommand::Pause { timer_id } => pause(&mut conn, timer_id),
