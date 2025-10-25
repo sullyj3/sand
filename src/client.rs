@@ -1,7 +1,6 @@
 use std::io::{self, BufRead, BufReader, LineWriter, Write};
 use std::os::unix::net::UnixStream;
 use std::path::PathBuf;
-use std::process::exit;
 use std::time::Duration;
 
 use serde::Deserialize;
@@ -89,11 +88,6 @@ fn display_timer_info_table(
     }
 }
 
-fn exit_timer_not_found(id: TimerId) -> ! {
-    println!("Timer {id} not found.");
-    exit(1)
-}
-
 pub fn main(cmd: cli::CliCommand) -> io::Result<()> {
     let Some(sock_path) = socket::get_sock_path() else {
         eprintln!("socket not provided and runtime directory does not exist.");
@@ -148,10 +142,15 @@ fn pause(conn: &mut DaemonConnection, timer_id: TimerId) -> Result<(), io::Error
             println!("Paused timer {timer_id}.");
             Ok(())
         }
-        PauseTimerResponse::TimerNotFound => exit_timer_not_found(timer_id),
+        PauseTimerResponse::TimerNotFound => {
+            let msg = format!("Timer {timer_id} not found.");
+            println!("{msg}");
+            Err(io::Error::new(io::ErrorKind::Other, msg))
+        }
         PauseTimerResponse::AlreadyPaused => {
-            println!("Timer {timer_id} is already paused.");
-            exit(1);
+            let msg = format!("Timer {timer_id} is already paused.");
+            println!("{msg}");
+            Err(io::Error::new(io::ErrorKind::Other, msg))
         }
     }
 }
@@ -164,10 +163,15 @@ fn resume(conn: &mut DaemonConnection, timer_id: TimerId) -> Result<(), io::Erro
             println!("Resumed timer {timer_id}.");
             Ok(())
         }
-        Resp::TimerNotFound => exit_timer_not_found(timer_id),
+        Resp::TimerNotFound => {
+            let msg = format!("Timer {timer_id} not found.");
+            println!("{msg}");
+            Err(io::Error::new(io::ErrorKind::Other, msg))
+        }
         Resp::AlreadyRunning => {
-            println!("Timer {timer_id} is already running.");
-            exit(1);
+            let msg = format!("Timer {timer_id} is already running.");
+            println!("{msg}");
+            Err(io::Error::new(io::ErrorKind::Other, msg))
         }
     }
 }
@@ -180,6 +184,10 @@ fn cancel(conn: &mut DaemonConnection, timer_id: TimerId) -> Result<(), io::Erro
             println!("Cancelled timer {timer_id}.");
             Ok(())
         }
-        Resp::TimerNotFound => exit_timer_not_found(timer_id),
+        Resp::TimerNotFound => {
+            let msg = format!("Timer {timer_id} not found.");
+            println!("{msg}");
+            Err(io::Error::new(io::ErrorKind::Other, msg))
+        }
     }
 }
