@@ -1,4 +1,5 @@
 use std::{
+    cmp::Ordering,
     fmt::Display,
     time::{Duration, Instant},
 };
@@ -96,5 +97,9 @@ impl TimerInfoForClient {
             id.to_string(),
             width = first_column_width
         )
+    }
+
+    pub fn cmp_by_next_due(t1: &Self, t2: &Self) -> Ordering {
+        t1.remaining_millis.cmp(&t2.remaining_millis)
     }
 }

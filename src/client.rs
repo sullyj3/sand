@@ -13,7 +13,7 @@ use crate::sand::message::{
     self, AddTimerResponse, Command, ListResponse, PauseTimerResponse, ResumeTimerResponse,
 };
 use crate::sand::socket;
-use crate::sand::timer::{TimerId, TimerInfoForClient};
+use crate::sand::timer::{TimerId, TimerInfoForClient, TimerState};
 
 struct DaemonConnection {
     read: BufReader<UnixStream>,
@@ -44,21 +44,50 @@ impl DaemonConnection {
     }
 }
 
-fn display_timer_info(timers: &[TimerInfoForClient]) -> String {
+fn display_timer_info(mut timers: Vec<TimerInfoForClient>) -> String {
     if timers.len() == 0 {
-        "No timers running.".into()
+        return "There are currently no timers.".into();
+    };
+
+    let mut output = String::new();
+
+    timers.sort_by(TimerInfoForClient::cmp_by_next_due);
+    let (running, paused): (Vec<_>, Vec<_>) = timers
+        .iter()
+        .partition(|ti| ti.state == TimerState::Running);
+
+    output.push_str("Running timers:\n");
+    if running.len() > 0 {
+        display_timer_info_table(&mut output, &running);
     } else {
+        output.push_str("  None.\n");
+    }
+
+    output.push_str("Paused timers:\n");
+    if paused.len() > 0 {
+        display_timer_info_table(&mut output, &paused);
+    } else {
+        output.push_str("  None.\n");
+    }
+
+    output
+}
+
+// Used separately for running and paused timers
+// timers must be nonempty
+fn display_timer_info_table(output: &mut String, timers: &[&TimerInfoForClient]) -> () {
+    let first_column_width = {
         let max_id = timers
             .iter()
             .map(|ti| ti.id)
             .max()
             .expect("timers.len() != 0");
-        let first_column_width = max_id.to_string().len();
-        timers
-            .iter()
-            .map(|ti| ti.display(first_column_width))
-            .intersperse("\n".to_string())
-            .collect()
+        max_id.to_string().len()
+    };
+
+    for timer in timers {
+        output.push_str(&timer.display(first_column_width));
+        output.push('\n');
     }
 }
 
@@ -99,7 +128,7 @@ pub fn main(cmd: cli::CliCommand) -> io::Result<()> {
         }
         cli::CliCommand::Ls => {
             conn.send(Command::List)?;
-            let ListResponse::Ok { ref timers } = conn.recv::<ListResponse>()?;
+            let ListResponse::Ok { timers } = conn.recv::<ListResponse>()?;
             println!("{}", display_timer_info(timers));
             Ok(())
         }
