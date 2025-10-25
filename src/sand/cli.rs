@@ -2,7 +2,7 @@ use std::time::Duration;
 
 use clap::{Args, Parser, Subcommand};
 
-use crate::sand;
+use crate::sand::{self, timer::TimerId};
 
 #[derive(Args, Clone)]
 pub struct DaemonArgs {}
@@ -39,11 +39,11 @@ pub enum CliCommand {
     #[clap(alias = "list")]
     Ls,
     /// Pause the timer with the given ID
-    Pause { timer_id: String },
+    Pause { timer_id: TimerId },
     /// Resume the timer with the given ID
-    Resume { timer_id: String },
+    Resume { timer_id: TimerId },
     /// Cancel the timer with the given ID
-    Cancel { timer_id: String },
+    Cancel { timer_id: TimerId },
 
     /// Launch the daemon
     Daemon(DaemonArgs),

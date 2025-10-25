@@ -4,11 +4,14 @@ use std::{
     time::{Duration, Instant},
 };
 
+use derive_more::FromStr;
 use serde::{Deserialize, Serialize};
 
 use crate::sand::duration::DurationExt;
 
-#[derive(PartialEq, Eq, PartialOrd, Ord, Hash, Debug, Clone, Copy, Serialize, Deserialize)]
+#[derive(
+    PartialEq, Eq, PartialOrd, Ord, Hash, Debug, Clone, Copy, Serialize, Deserialize, FromStr,
+)]
 pub struct TimerId(pub u64);
 
 impl Default for TimerId {
@@ -20,18 +23,6 @@ impl Default for TimerId {
 impl Display for TimerId {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         write!(f, "#{}", self.0)
-    }
-}
-
-impl TimerId {
-    // TODO this should return the result and quitting should be in the client
-    pub fn parse_or_quit(timer_id: &str) -> Self {
-        u64::from_str_radix(&timer_id, 10)
-            .map(TimerId)
-            .unwrap_or_else(|e| {
-                eprintln!("Failed to parse timer id \"{timer_id}\": {e}");
-                std::process::exit(1)
-            })
     }
 }
 

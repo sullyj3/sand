@@ -131,7 +131,6 @@ pub fn main(cmd: cli::CliCommand) -> io::Result<()> {
             Ok(())
         }
         cli::CliCommand::Pause { timer_id } => {
-            let timer_id = TimerId::parse_or_quit(&timer_id);
             conn.send(Command::PauseTimer(timer_id))?;
             match conn.recv::<PauseTimerResponse>()? {
                 PauseTimerResponse::Ok => {
@@ -146,7 +145,6 @@ pub fn main(cmd: cli::CliCommand) -> io::Result<()> {
             }
         }
         cli::CliCommand::Resume { timer_id } => {
-            let timer_id = TimerId::parse_or_quit(&timer_id);
             conn.send(Command::ResumeTimer(timer_id))?;
             use ResumeTimerResponse as Resp;
             match conn.recv::<ResumeTimerResponse>()? {
@@ -162,7 +160,6 @@ pub fn main(cmd: cli::CliCommand) -> io::Result<()> {
             }
         }
         cli::CliCommand::Cancel { timer_id } => {
-            let timer_id = TimerId::parse_or_quit(&timer_id);
             conn.send(Command::CancelTimer(timer_id))?;
             use message::CancelTimerResponse as Resp;
             match conn.recv::<Resp>()? {
