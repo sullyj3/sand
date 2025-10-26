@@ -138,10 +138,7 @@ pub fn main(cmd: cli::CliCommand) -> io::Result<()> {
     let command_result = handle_command(cmd, conn);
     match command_result {
         Ok(()) => Ok(()),
-        Err(e) => {
-            eprintln!("{e}");
-            std::process::exit(1)
-        }
+        Err(_) => std::process::exit(1),
     }
 }
 
@@ -149,12 +146,50 @@ fn handle_command(cmd: cli::CliCommand, mut conn: DaemonConnection) -> ClientRes
     // TODO: make sure to parse Error Messages. we should prob move sending,
     // receiving, and parsing fully into DaemonConnection, and present
     // Command -> Result<CmdResponse, Error> type api
+
+    // TODO: for multi-id commands, it's a bit wack to only return one of the errors.
+    // This needs to be re-worked somehow. I think the problem is that we're
+    // conceptually mixing up client cli commands with message protocol commands.
+    //
+    // I think we need to extract a daemon_connection.rs module that presents exactly
+    // the message protocol interface
+
+    // TODO: support passing multiple IDs in protocol
     match cmd {
-        cli::CliCommand::Start(StartArgs { durations }) => start(&mut conn, durations),
-        cli::CliCommand::Ls => ls(&mut conn),
-        cli::CliCommand::Pause { timer_id } => pause(&mut conn, timer_id),
-        cli::CliCommand::Resume { timer_id } => resume(&mut conn, timer_id),
-        cli::CliCommand::Cancel { timer_id } => cancel(&mut conn, timer_id),
+        cli::CliCommand::Start(StartArgs { durations }) => {
+            start(&mut conn, durations).inspect_err(|err| eprintln!("{err}"))
+        }
+        cli::CliCommand::Ls => ls(&mut conn).inspect_err(|err| eprintln!("{err}")),
+        cli::CliCommand::Pause { timer_ids } => {
+            let mut ret = Ok(());
+            for result in timer_ids.iter().map(|id| pause(&mut conn, *id)) {
+                if let Err(err) = result {
+                    eprintln!("{err}");
+                    ret = Err(err);
+                }
+            }
+            ret
+        }
+        cli::CliCommand::Resume { timer_ids } => {
+            let mut ret = Ok(());
+            for result in timer_ids.iter().map(|id| resume(&mut conn, *id)) {
+                if let Err(err) = result {
+                    eprintln!("{err}");
+                    ret = Err(err);
+                }
+            }
+            ret
+        }
+        cli::CliCommand::Cancel { timer_ids } => {
+            let mut ret = Ok(());
+            for result in timer_ids.iter().map(|id| cancel(&mut conn, *id)) {
+                if let Err(err) = result {
+                    eprintln!("{err}");
+                    ret = Err(err);
+                }
+            }
+            ret
+        }
         cli::CliCommand::Daemon(_) => unreachable!("handled in top level main"),
     }
 }
