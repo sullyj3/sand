@@ -8,9 +8,7 @@ use crate::cli;
 use crate::client::daemon_connection::DaemonConnection;
 use crate::sand::cli::StartArgs;
 use crate::sand::duration::DurationExt;
-use crate::sand::message::{
-    self, AddTimerResponse, Command, ListResponse, PauseTimerResponse, ResumeTimerResponse,
-};
+use crate::sand::message::*;
 use crate::sand::socket;
 use crate::sand::timer::{TimerId, TimerInfoForClient, TimerState};
 
@@ -161,10 +159,7 @@ fn handle_cli_command(cmd: cli::CliCommand, mut conn: DaemonConnection) -> Clien
 
 fn start(conn: &mut DaemonConnection, durations: Vec<Duration>) -> ClientResult<()> {
     let dur: Duration = durations.iter().sum();
-    conn.send(Command::AddTimer {
-        duration: dur.as_millis() as u64,
-    })?;
-    let AddTimerResponse::Ok { id } = conn.recv::<AddTimerResponse>()?;
+    let AddTimerResponse::Ok { id } = conn.add_timer(dur)?;
 
     let dur_string = dur.format_colon_separated();
     println!("Timer {id} created for {dur_string}.");
@@ -172,15 +167,13 @@ fn start(conn: &mut DaemonConnection, durations: Vec<Duration>) -> ClientResult<
 }
 
 fn ls(conn: &mut DaemonConnection) -> ClientResult<()> {
-    conn.send(Command::List)?;
-    let ListResponse::Ok { timers } = conn.recv::<ListResponse>()?;
+    let ListResponse::Ok { timers } = conn.list()?;
     print!("{}", display_timer_info(timers));
     Ok(())
 }
 
 fn pause(conn: &mut DaemonConnection, timer_id: TimerId) -> ClientResult<()> {
-    conn.send(Command::PauseTimer(timer_id))?;
-    match conn.recv::<PauseTimerResponse>()? {
+    match conn.pause_timer(timer_id)? {
         PauseTimerResponse::Ok => {
             println!("Paused timer {timer_id}.");
             Ok(())
@@ -191,9 +184,8 @@ fn pause(conn: &mut DaemonConnection, timer_id: TimerId) -> ClientResult<()> {
 }
 
 fn resume(conn: &mut DaemonConnection, timer_id: TimerId) -> ClientResult<()> {
-    conn.send(Command::ResumeTimer(timer_id))?;
     use ResumeTimerResponse as Resp;
-    match conn.recv::<ResumeTimerResponse>()? {
+    match conn.resume_timer(timer_id)? {
         Resp::Ok => {
             println!("Resumed timer {timer_id}.");
             Ok(())
@@ -204,9 +196,8 @@ fn resume(conn: &mut DaemonConnection, timer_id: TimerId) -> ClientResult<()> {
 }
 
 fn cancel(conn: &mut DaemonConnection, timer_id: TimerId) -> ClientResult<()> {
-    conn.send(Command::CancelTimer(timer_id))?;
-    use message::CancelTimerResponse as Resp;
-    match conn.recv::<Resp>()? {
+    use CancelTimerResponse as Resp;
+    match conn.cancel_timer(timer_id)? {
         Resp::Ok => {
             println!("Cancelled timer {timer_id}.");
             Ok(())
