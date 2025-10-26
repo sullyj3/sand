@@ -88,14 +88,14 @@ fn display_timer_info_table(
     }
 }
 
-pub fn main(cmd: cli::CliCommand) -> io::Result<()> {
+pub fn main(cli_cmd: cli::CliCommand) -> io::Result<()> {
     let Some(sock_path) = socket::get_sock_path() else {
         eprintln!("socket not provided and runtime directory does not exist.");
         eprintln!("no socket to use.");
         std::process::exit(1)
     };
 
-    let conn = match DaemonConnection::new(sock_path) {
+    let mut conn = match DaemonConnection::new(sock_path) {
         Ok(conn) => conn,
         Err(e) => {
             eprintln!("Error establishing connection with daemon: {e}");
@@ -103,22 +103,11 @@ pub fn main(cmd: cli::CliCommand) -> io::Result<()> {
         }
     };
 
-    match handle_cli_command(cmd, conn) {
-        Ok(()) => Ok(()),
-        Err(_) => std::process::exit(1),
-    }
-}
-
-/// Handles a CLI command by sending it to the daemon and processing the response.
-///
-/// this function will handle all printing of success and errors. The returned result
-/// does not need to be displayed, and is only used to determine the exit code.
-fn handle_cli_command(cmd: cli::CliCommand, mut conn: DaemonConnection) -> ClientResult<()> {
     // TODO: for multi-id commands, it's a bit wack to only return one of the errors.
     // This needs to be re-worked somehow.
 
     // TODO: support passing multiple IDs in protocol
-    match cmd {
+    let result: ClientResult<()> = match cli_cmd {
         cli::CliCommand::Start(StartArgs { durations }) => {
             start(&mut conn, durations).inspect_err(|err| eprintln!("{err}"))
         }
@@ -127,6 +116,12 @@ fn handle_cli_command(cmd: cli::CliCommand, mut conn: DaemonConnection) -> Clien
         cli::CliCommand::Resume { timer_ids } => resume(&mut conn, timer_ids),
         cli::CliCommand::Cancel { timer_ids } => cancel(&mut conn, timer_ids),
         cli::CliCommand::Daemon(_) => unreachable!("handled in top level main"),
+    };
+    // the individual command handler functions do all printing of success and
+    // errors. The result does not need to be displayed, and is only used to determine the exit code.
+    match result {
+        Ok(()) => Ok(()),
+        Err(_) => std::process::exit(1),
     }
 }
 
