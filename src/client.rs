@@ -76,8 +76,9 @@ fn display_timer_info(mut timers: Vec<TimerInfoForClient>) -> String {
     output
 }
 
-// Used separately for running and paused timers
-// timers must be nonempty
+/// Display a table of timer information. For use by `sand ls`
+///
+/// Used separately for running and paused timers.
 fn display_timer_info_table(
     output: &mut String,
     first_column_width: usize,
