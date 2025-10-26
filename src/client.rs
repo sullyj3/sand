@@ -46,7 +46,7 @@ impl DaemonConnection {
 
 fn display_timer_info(mut timers: Vec<TimerInfoForClient>) -> String {
     if timers.len() == 0 {
-        return "There are currently no timers.".into();
+        return "There are currently no timers.\n".into();
     };
 
     timers.sort_by(TimerInfoForClient::cmp_by_next_due);
