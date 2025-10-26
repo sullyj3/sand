@@ -122,10 +122,9 @@ async fn daemon(ctx: DaemonCtx, rx_elapsed_events: mpsc::Receiver<ElapsedEvent>)
     // Generate notifications and sounds for elapsed timers
     tokio::spawn(notifier_thread(rx_elapsed_events));
 
-    // handle events
     let c_ctx = ctx.clone();
     tokio::spawn(async move {
-        c_ctx.handle_events().await;
+        c_ctx.keep_time().await;
     });
 
     let unix_listener: tokio::net::UnixListener = get_socket()?;
