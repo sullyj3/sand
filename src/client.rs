@@ -1,3 +1,4 @@
+use std::fmt::{self, Display, Formatter};
 use std::io::{self, BufRead, BufReader, LineWriter, Write};
 use std::os::unix::net::UnixStream;
 use std::path::PathBuf;
@@ -42,6 +43,37 @@ impl DaemonConnection {
         Ok(resp)
     }
 }
+
+#[derive(Debug)]
+enum ClientError {
+    Io(io::Error),
+    TimerNotFound(TimerId),
+    AlreadyPaused(TimerId),
+    AlreadyRunning(TimerId),
+}
+
+impl Display for ClientError {
+    fn fmt(&self, f: &mut Formatter<'_>) -> fmt::Result {
+        match self {
+            ClientError::Io(err) => write!(f, "I/O error: {}", err),
+            ClientError::TimerNotFound(timer_id) => write!(f, "Timer {timer_id} not found."),
+            ClientError::AlreadyPaused(timer_id) => {
+                write!(f, "Timer {timer_id} is already paused.")
+            }
+            ClientError::AlreadyRunning(timer_id) => {
+                write!(f, "Timer {timer_id} is already running.")
+            }
+        }
+    }
+}
+
+impl From<io::Error> for ClientError {
+    fn from(value: io::Error) -> Self {
+        ClientError::Io(value)
+    }
+}
+
+type ClientResult<T> = Result<T, ClientError>;
 
 fn display_timer_info(mut timers: Vec<TimerInfoForClient>) -> String {
     if timers.len() == 0 {
@@ -103,10 +135,17 @@ pub fn main(cmd: cli::CliCommand) -> io::Result<()> {
         }
     };
 
-    handle_command(cmd, conn)
+    let command_result = handle_command(cmd, conn);
+    match command_result {
+        Ok(()) => Ok(()),
+        Err(e) => {
+            eprintln!("{e}");
+            std::process::exit(1)
+        }
+    }
 }
 
-fn handle_command(cmd: cli::CliCommand, mut conn: DaemonConnection) -> io::Result<()> {
+fn handle_command(cmd: cli::CliCommand, mut conn: DaemonConnection) -> ClientResult<()> {
     // TODO: make sure to parse Error Messages. we should prob move sending,
     // receiving, and parsing fully into DaemonConnection, and present
     // Command -> Result<CmdResponse, Error> type api
@@ -120,7 +159,7 @@ fn handle_command(cmd: cli::CliCommand, mut conn: DaemonConnection) -> io::Resul
     }
 }
 
-fn start(conn: &mut DaemonConnection, durations: Vec<Duration>) -> Result<(), io::Error> {
+fn start(conn: &mut DaemonConnection, durations: Vec<Duration>) -> ClientResult<()> {
     let dur: Duration = durations.iter().sum();
     conn.send(Command::AddTimer {
         duration: dur.as_millis() as u64,
@@ -132,34 +171,26 @@ fn start(conn: &mut DaemonConnection, durations: Vec<Duration>) -> Result<(), io
     Ok(())
 }
 
-fn ls(conn: &mut DaemonConnection) -> Result<(), io::Error> {
+fn ls(conn: &mut DaemonConnection) -> ClientResult<()> {
     conn.send(Command::List)?;
     let ListResponse::Ok { timers } = conn.recv::<ListResponse>()?;
     print!("{}", display_timer_info(timers));
     Ok(())
 }
 
-fn pause(conn: &mut DaemonConnection, timer_id: TimerId) -> Result<(), io::Error> {
+fn pause(conn: &mut DaemonConnection, timer_id: TimerId) -> ClientResult<()> {
     conn.send(Command::PauseTimer(timer_id))?;
     match conn.recv::<PauseTimerResponse>()? {
         PauseTimerResponse::Ok => {
             println!("Paused timer {timer_id}.");
             Ok(())
         }
-        PauseTimerResponse::TimerNotFound => {
-            let msg = format!("Timer {timer_id} not found.");
-            println!("{msg}");
-            Err(io::Error::new(io::ErrorKind::Other, msg))
-        }
-        PauseTimerResponse::AlreadyPaused => {
-            let msg = format!("Timer {timer_id} is already paused.");
-            println!("{msg}");
-            Err(io::Error::new(io::ErrorKind::Other, msg))
-        }
+        PauseTimerResponse::TimerNotFound => Err(ClientError::TimerNotFound(timer_id)),
+        PauseTimerResponse::AlreadyPaused => Err(ClientError::AlreadyPaused(timer_id)),
     }
 }
 
-fn resume(conn: &mut DaemonConnection, timer_id: TimerId) -> Result<(), io::Error> {
+fn resume(conn: &mut DaemonConnection, timer_id: TimerId) -> ClientResult<()> {
     conn.send(Command::ResumeTimer(timer_id))?;
     use ResumeTimerResponse as Resp;
     match conn.recv::<ResumeTimerResponse>()? {
@@ -167,20 +198,12 @@ fn resume(conn: &mut DaemonConnection, timer_id: TimerId) -> Result<(), io::Erro
             println!("Resumed timer {timer_id}.");
             Ok(())
         }
-        Resp::TimerNotFound => {
-            let msg = format!("Timer {timer_id} not found.");
-            println!("{msg}");
-            Err(io::Error::new(io::ErrorKind::Other, msg))
-        }
-        Resp::AlreadyRunning => {
-            let msg = format!("Timer {timer_id} is already running.");
-            println!("{msg}");
-            Err(io::Error::new(io::ErrorKind::Other, msg))
-        }
+        Resp::TimerNotFound => Err(ClientError::TimerNotFound(timer_id)),
+        Resp::AlreadyRunning => Err(ClientError::AlreadyRunning(timer_id)),
     }
 }
 
-fn cancel(conn: &mut DaemonConnection, timer_id: TimerId) -> Result<(), io::Error> {
+fn cancel(conn: &mut DaemonConnection, timer_id: TimerId) -> ClientResult<()> {
     conn.send(Command::CancelTimer(timer_id))?;
     use message::CancelTimerResponse as Resp;
     match conn.recv::<Resp>()? {
@@ -188,10 +211,6 @@ fn cancel(conn: &mut DaemonConnection, timer_id: TimerId) -> Result<(), io::Erro
             println!("Cancelled timer {timer_id}.");
             Ok(())
         }
-        Resp::TimerNotFound => {
-            let msg = format!("Timer {timer_id} not found.");
-            println!("{msg}");
-            Err(io::Error::new(io::ErrorKind::Other, msg))
-        }
+        Resp::TimerNotFound => Err(ClientError::TimerNotFound(timer_id)),
     }
 }
