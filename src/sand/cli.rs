@@ -7,10 +7,17 @@ use crate::sand::{self, timer::TimerId};
 #[derive(Args, Clone)]
 pub struct DaemonArgs {}
 
+const AFTER_HELP: &str = "To use a custom timer sound, place a flac at
+
+    $XDG_DATA_HOME/sand-timer/timer_sound.flac.
+
+XDG_DATA_HOME defaults to ~/.local/share/";
+
 #[derive(Parser)]
 #[command(
     name = "sand",
     about = "Command line countdown timers that don't take up a terminal.",
+    after_help = AFTER_HELP,
     infer_subcommands = true,
     version
 )]
