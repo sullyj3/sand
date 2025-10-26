@@ -52,6 +52,10 @@ fn get_fd() -> RawFd {
     }
 }
 
+/// Get a UnixListener for accepting client connections.
+///
+/// Since this calls UnixListener::bind, it must be called from within a tokio
+/// runtime.
 fn get_socket() -> io::Result<tokio::net::UnixListener> {
     env_sock_path()
         .inspect(|path: &PathBuf| {
@@ -92,10 +96,6 @@ fn get_socket() -> io::Result<tokio::net::UnixListener> {
 /////////////////////////////////////////////////////////////////////////////////////////
 
 pub fn main(_args: cli::DaemonArgs) -> io::Result<()> {
-    tokio::runtime::Runtime::new()?.block_on(daemon())
-}
-
-async fn daemon() -> io::Result<()> {
     // Logging
     let mut log_builder = colog::default_builder();
     if std::env::var("RUST_LOG").is_err() {
@@ -106,9 +106,8 @@ async fn daemon() -> io::Result<()> {
     log_builder.init();
     log::info!("Starting sand daemon v{}", env!("CARGO_PKG_VERSION"));
 
-    // Generate notifications and sounds for elapsed timers
+    // Channel for reporting elapsed timers
     let (tx_elapsed_events, rx_elapsed_events) = mpsc::channel(20);
-    tokio::spawn(notifier_thread(rx_elapsed_events));
 
     let ctx = DaemonCtx {
         timers: Default::default(),
@@ -116,16 +115,21 @@ async fn daemon() -> io::Result<()> {
         refresh_next_due: Arc::new(Notify::new()),
     };
 
+    tokio::runtime::Runtime::new()?.block_on(daemon(ctx, rx_elapsed_events))
+}
+
+async fn daemon(ctx: DaemonCtx, rx_elapsed_events: mpsc::Receiver<ElapsedEvent>) -> io::Result<()> {
+    // Generate notifications and sounds for elapsed timers
+    tokio::spawn(notifier_thread(rx_elapsed_events));
+
     // handle events
     let c_ctx = ctx.clone();
     tokio::spawn(async move {
         c_ctx.handle_events().await;
     });
 
-    // handle client connections
-    let listener: tokio::net::UnixListener = get_socket()?;
-    log::info!("Daemon started.");
-    accept_loop(listener, ctx).await;
+    let unix_listener: tokio::net::UnixListener = get_socket()?;
+    client_accept_loop(unix_listener, ctx).await;
 }
 
 /////////////////////////////////////////////////////////////////////////////////////////
@@ -189,7 +193,8 @@ async fn notifier_thread(mut elapsed_events: mpsc::Receiver<ElapsedEvent>) -> ! 
     unreachable!("bug: elapsed_events channel was closed.")
 }
 
-async fn accept_loop(listener: tokio::net::UnixListener, ctx: DaemonCtx) -> ! {
+async fn client_accept_loop(listener: tokio::net::UnixListener, ctx: DaemonCtx) -> ! {
+    log::info!("Daemon started.");
     log::info!("Starting accept loop");
     loop {
         match listener.accept().await {
