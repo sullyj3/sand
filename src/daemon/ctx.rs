@@ -70,10 +70,12 @@ impl DaemonCtx {
         self.timers.get_timerinfo_for_client(now)
     }
 
-    // main worker task. handles:
-    // - timer elapses
-    // - system sleep and wake
-    pub async fn handle_events(&self) -> ! {
+    /// The main worker task.
+    ///
+    /// handles:
+    /// - counting down timers
+    /// - system sleep and wake
+    pub async fn keep_time(&self) -> ! {
         let mut state = KeepTimeState::Awake;
         let suspends_stream = dbus_suspend_events().await.unwrap_or_else(|err| {
             log::error!("Unable to receive D-Bus suspend events: {}", err);
