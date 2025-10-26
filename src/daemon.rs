@@ -25,6 +25,12 @@ use handle_client::handle_client;
 
 const SYSTEMD_SOCKFD: RawFd = 3;
 
+struct ElapsedEvent(TimerId);
+
+/////////////////////////////////////////////////////////////////////////////////////////
+// Setup
+/////////////////////////////////////////////////////////////////////////////////////////
+
 fn env_fd() -> Option<u32> {
     let str_fd = std::env::var("SAND_SOCKFD").ok()?;
     let fd = str_fd
@@ -45,23 +51,6 @@ fn get_fd() -> RawFd {
             fd.try_into()
                 .expect("Error: SAND_SOCKFD is too large to be a file descriptor.")
         }
-    }
-}
-
-async fn accept_loop(listener: UnixListener, ctx: DaemonCtx) -> ! {
-    log::info!("Starting accept loop");
-    loop {
-        match listener.accept().await {
-            Ok((stream, _addr)) => {
-                log::trace!("Got client");
-
-                let _jh = tokio::spawn(handle_client(stream, ctx.clone()));
-            }
-            Err(e) => {
-                log::error!("Failed to accept client: {}", e);
-                continue;
-            }
-        };
     }
 }
 
@@ -100,6 +89,14 @@ fn get_socket() -> io::Result<UnixListener> {
         })
 }
 
+/////////////////////////////////////////////////////////////////////////////////////////
+// Main
+/////////////////////////////////////////////////////////////////////////////////////////
+
+pub fn main(_args: cli::DaemonArgs) -> io::Result<()> {
+    tokio::runtime::Runtime::new()?.block_on(daemon())
+}
+
 async fn daemon() -> io::Result<()> {
     // Logging
     let mut log_builder = colog::default_builder();
@@ -133,28 +130,9 @@ async fn daemon() -> io::Result<()> {
     accept_loop(listener, ctx).await;
 }
 
-struct ElapsedEvent(TimerId);
-
-pub fn do_notification(player: Option<ElapsedSoundPlayer>, timer_id: TimerId) {
-    let notification = Notification::new()
-        .summary("Time's up!")
-        .body(&format!("Timer {timer_id} has elapsed"))
-        .icon("alarm")
-        .urgency(notify_rust::Urgency::Critical)
-        .show();
-    if let Err(e) = notification {
-        log::error!("Error showing desktop notification: {e}");
-    }
-
-    if let Some(ref player) = player {
-        log::debug!("playing sound");
-        if let Err(e) = player.play() {
-            log::error!("Error playing timer elapsed sound: {e}");
-        }
-    } else {
-        log::debug!("player is None - not playing sound");
-    }
-}
+/////////////////////////////////////////////////////////////////////////////////////////
+// Worker tasks
+/////////////////////////////////////////////////////////////////////////////////////////
 
 async fn notifier_thread(mut elapsed_events: Receiver<ElapsedEvent>) -> ! {
     let stream_handle = match rodio::OutputStream::try_default() {
@@ -213,6 +191,44 @@ async fn notifier_thread(mut elapsed_events: Receiver<ElapsedEvent>) -> ! {
     unreachable!("bug: elapsed_events channel was closed.")
 }
 
-pub fn main(_args: cli::DaemonArgs) -> io::Result<()> {
-    tokio::runtime::Runtime::new()?.block_on(daemon())
+async fn accept_loop(listener: UnixListener, ctx: DaemonCtx) -> ! {
+    log::info!("Starting accept loop");
+    loop {
+        match listener.accept().await {
+            Ok((stream, _addr)) => {
+                log::trace!("Got client");
+
+                let _jh = tokio::spawn(handle_client(stream, ctx.clone()));
+            }
+            Err(e) => {
+                log::error!("Failed to accept client: {}", e);
+                continue;
+            }
+        };
+    }
+}
+
+/////////////////////////////////////////////////////////////////////////////////////////
+// Helpers
+/////////////////////////////////////////////////////////////////////////////////////////
+
+pub fn do_notification(player: Option<ElapsedSoundPlayer>, timer_id: TimerId) {
+    let notification = Notification::new()
+        .summary("Time's up!")
+        .body(&format!("Timer {timer_id} has elapsed"))
+        .icon("alarm")
+        .urgency(notify_rust::Urgency::Critical)
+        .show();
+    if let Err(e) = notification {
+        log::error!("Error showing desktop notification: {e}");
+    }
+
+    if let Some(ref player) = player {
+        log::debug!("playing sound");
+        if let Err(e) = player.play() {
+            log::error!("Error playing timer elapsed sound: {e}");
+        }
+    } else {
+        log::debug!("player is None - not playing sound");
+    }
 }
