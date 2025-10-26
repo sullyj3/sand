@@ -43,50 +43,9 @@ impl From<io::Error> for ClientError {
 
 type ClientResult<T> = Result<T, ClientError>;
 
-fn display_timer_info(mut timers: Vec<TimerInfoForClient>) -> String {
-    if timers.len() == 0 {
-        return "There are currently no timers.".into();
-    };
-
-    timers.sort_by(TimerInfoForClient::cmp_by_next_due);
-    let (running, paused): (Vec<_>, Vec<_>) = timers
-        .iter()
-        .partition(|ti| ti.state == TimerState::Running);
-
-    let first_column_width = {
-        let max_id = timers
-            .iter()
-            .map(|ti| ti.id)
-            .max()
-            .expect("timers.len() != 0");
-        max_id.to_string().len()
-    };
-    let mut output = String::new();
-    if running.len() > 0 {
-        display_timer_info_table(&mut output, first_column_width, &running);
-        if paused.len() > 0 {
-            output.push_str("\n");
-        }
-    }
-    if paused.len() > 0 {
-        display_timer_info_table(&mut output, first_column_width, &paused);
-    }
-
-    output
-}
-
-// Used separately for running and paused timers
-// timers must be nonempty
-fn display_timer_info_table(
-    output: &mut String,
-    first_column_width: usize,
-    timers: &[&TimerInfoForClient],
-) -> () {
-    for timer in timers {
-        output.push_str(&timer.display(first_column_width));
-        output.push('\n');
-    }
-}
+/////////////////////////////////////////////////////////////////////////////////////////
+// Main
+/////////////////////////////////////////////////////////////////////////////////////////
 
 pub fn main(cli_cmd: cli::CliCommand) -> io::Result<()> {
     let Some(sock_path) = socket::get_sock_path() else {
@@ -124,6 +83,10 @@ pub fn main(cli_cmd: cli::CliCommand) -> io::Result<()> {
         Err(_) => std::process::exit(1),
     }
 }
+
+/////////////////////////////////////////////////////////////////////////////////////////
+// Command handler functions
+/////////////////////////////////////////////////////////////////////////////////////////
 
 fn start(conn: &mut DaemonConnection, durations: Vec<Duration>) -> ClientResult<()> {
     let dur: Duration = durations.iter().sum();
@@ -205,4 +168,53 @@ fn cancel(conn: &mut DaemonConnection, timer_ids: Vec<TimerId>) -> ClientResult<
         }
     }
     ret
+}
+
+/////////////////////////////////////////////////////////////////////////////////////////
+// Helpers
+/////////////////////////////////////////////////////////////////////////////////////////
+
+fn display_timer_info(mut timers: Vec<TimerInfoForClient>) -> String {
+    if timers.len() == 0 {
+        return "There are currently no timers.".into();
+    };
+
+    timers.sort_by(TimerInfoForClient::cmp_by_next_due);
+    let (running, paused): (Vec<_>, Vec<_>) = timers
+        .iter()
+        .partition(|ti| ti.state == TimerState::Running);
+
+    let first_column_width = {
+        let max_id = timers
+            .iter()
+            .map(|ti| ti.id)
+            .max()
+            .expect("timers.len() != 0");
+        max_id.to_string().len()
+    };
+    let mut output = String::new();
+    if running.len() > 0 {
+        display_timer_info_table(&mut output, first_column_width, &running);
+        if paused.len() > 0 {
+            output.push_str("\n");
+        }
+    }
+    if paused.len() > 0 {
+        display_timer_info_table(&mut output, first_column_width, &paused);
+    }
+
+    output
+}
+
+// Used separately for running and paused timers
+// timers must be nonempty
+fn display_timer_info_table(
+    output: &mut String,
+    first_column_width: usize,
+    timers: &[&TimerInfoForClient],
+) -> () {
+    for timer in timers {
+        output.push_str(&timer.display(first_column_width));
+        output.push('\n');
+    }
 }
