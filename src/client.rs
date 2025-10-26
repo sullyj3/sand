@@ -122,37 +122,10 @@ fn handle_cli_command(cmd: cli::CliCommand, mut conn: DaemonConnection) -> Clien
         cli::CliCommand::Start(StartArgs { durations }) => {
             start(&mut conn, durations).inspect_err(|err| eprintln!("{err}"))
         }
-        cli::CliCommand::Ls => ls(&mut conn).inspect_err(|err| eprintln!("{err}")),
-        cli::CliCommand::Pause { timer_ids } => {
-            let mut ret = Ok(());
-            for result in timer_ids.iter().map(|id| pause(&mut conn, *id)) {
-                if let Err(err) = result {
-                    eprintln!("{err}");
-                    ret = Err(err);
-                }
-            }
-            ret
-        }
-        cli::CliCommand::Resume { timer_ids } => {
-            let mut ret = Ok(());
-            for result in timer_ids.iter().map(|id| resume(&mut conn, *id)) {
-                if let Err(err) = result {
-                    eprintln!("{err}");
-                    ret = Err(err);
-                }
-            }
-            ret
-        }
-        cli::CliCommand::Cancel { timer_ids } => {
-            let mut ret = Ok(());
-            for result in timer_ids.iter().map(|id| cancel(&mut conn, *id)) {
-                if let Err(err) = result {
-                    eprintln!("{err}");
-                    ret = Err(err);
-                }
-            }
-            ret
-        }
+        cli::CliCommand::Ls => ls(&mut conn),
+        cli::CliCommand::Pause { timer_ids } => pause(&mut conn, timer_ids),
+        cli::CliCommand::Resume { timer_ids } => resume(&mut conn, timer_ids),
+        cli::CliCommand::Cancel { timer_ids } => cancel(&mut conn, timer_ids),
         cli::CliCommand::Daemon(_) => unreachable!("handled in top level main"),
     }
 }
@@ -167,41 +140,74 @@ fn start(conn: &mut DaemonConnection, durations: Vec<Duration>) -> ClientResult<
 }
 
 fn ls(conn: &mut DaemonConnection) -> ClientResult<()> {
-    let ListResponse::Ok { timers } = conn.list()?;
-    print!("{}", display_timer_info(timers));
-    Ok(())
-}
-
-fn pause(conn: &mut DaemonConnection, timer_id: TimerId) -> ClientResult<()> {
-    match conn.pause_timer(timer_id)? {
-        PauseTimerResponse::Ok => {
-            println!("Paused timer {timer_id}.");
+    match conn.list() {
+        Ok(resp) => {
+            let ListResponse::Ok { timers } = resp;
+            print!("{}", display_timer_info(timers));
             Ok(())
         }
-        PauseTimerResponse::TimerNotFound => Err(ClientError::TimerNotFound(timer_id)),
-        PauseTimerResponse::AlreadyPaused => Err(ClientError::AlreadyPaused(timer_id)),
+        Err(err) => {
+            eprintln!("{err}");
+            Err(err.into())
+        }
     }
 }
 
-fn resume(conn: &mut DaemonConnection, timer_id: TimerId) -> ClientResult<()> {
-    use ResumeTimerResponse as Resp;
-    match conn.resume_timer(timer_id)? {
-        Resp::Ok => {
-            println!("Resumed timer {timer_id}.");
-            Ok(())
+fn pause(conn: &mut DaemonConnection, timer_ids: Vec<TimerId>) -> ClientResult<()> {
+    let mut ret = Ok(());
+    for timer_id in timer_ids {
+        let result = match conn.pause_timer(timer_id)? {
+            PauseTimerResponse::Ok => Ok(()),
+            PauseTimerResponse::TimerNotFound => Err(ClientError::TimerNotFound(timer_id)),
+            PauseTimerResponse::AlreadyPaused => Err(ClientError::AlreadyPaused(timer_id)),
+        };
+
+        match result {
+            Err(err) => {
+                eprintln!("{err}");
+                ret = Err(err);
+            }
+            Ok(()) => println!("Paused timer {timer_id}."),
         }
-        Resp::TimerNotFound => Err(ClientError::TimerNotFound(timer_id)),
-        Resp::AlreadyRunning => Err(ClientError::AlreadyRunning(timer_id)),
     }
+    ret
 }
 
-fn cancel(conn: &mut DaemonConnection, timer_id: TimerId) -> ClientResult<()> {
-    use CancelTimerResponse as Resp;
-    match conn.cancel_timer(timer_id)? {
-        Resp::Ok => {
-            println!("Cancelled timer {timer_id}.");
-            Ok(())
+fn resume(conn: &mut DaemonConnection, timer_ids: Vec<TimerId>) -> ClientResult<()> {
+    let mut ret = Ok(());
+    for timer_id in timer_ids {
+        let result = match conn.resume_timer(timer_id)? {
+            ResumeTimerResponse::Ok => Ok(()),
+            ResumeTimerResponse::TimerNotFound => Err(ClientError::TimerNotFound(timer_id)),
+            ResumeTimerResponse::AlreadyRunning => Err(ClientError::AlreadyRunning(timer_id)),
+        };
+
+        match result {
+            Err(err) => {
+                eprintln!("{err}");
+                ret = Err(err);
+            }
+            Ok(()) => println!("Resumed timer {timer_id}."),
         }
-        Resp::TimerNotFound => Err(ClientError::TimerNotFound(timer_id)),
     }
+    ret
+}
+
+fn cancel(conn: &mut DaemonConnection, timer_ids: Vec<TimerId>) -> ClientResult<()> {
+    let mut ret = Ok(());
+    for timer_id in timer_ids {
+        let result = match conn.cancel_timer(timer_id)? {
+            CancelTimerResponse::Ok => Ok(()),
+            CancelTimerResponse::TimerNotFound => Err(ClientError::TimerNotFound(timer_id)),
+        };
+
+        match result {
+            Err(err) => {
+                eprintln!("{err}");
+                ret = Err(err);
+            }
+            Ok(()) => println!("Cancelled timer {timer_id}."),
+        }
+    }
+    ret
 }
