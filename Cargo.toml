@@ -1,6 +1,6 @@
 [package]
 name = "sand"
-version = "0.3.1"
+version = "0.4.0"
 edition = "2021"
 
 [profile.release]
@@ -10,7 +10,7 @@ strip = true
 clap = { version = "4.5.13", features = ["derive"] }
 colog = "1.4.0"
 dashmap = "6.0.1"
-derive_more = { version = "2", features = ["from"] }
+derive_more = { version = "2", features = ["from", "from_str"] }
 dirs = "6.0"
 log = "0.4.28"
 logind-zbus = "5.3.2"
