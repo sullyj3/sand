@@ -11,9 +11,7 @@ use std::os::unix::fs::FileTypeExt;
 use std::path::PathBuf;
 use std::sync::Arc;
 use tokio;
-use tokio::net::UnixListener;
 use tokio::sync::mpsc;
-use tokio::sync::mpsc::Receiver;
 use tokio::sync::Notify;
 
 use crate::cli;
@@ -54,7 +52,7 @@ fn get_fd() -> RawFd {
     }
 }
 
-fn get_socket() -> io::Result<UnixListener> {
+fn get_socket() -> io::Result<tokio::net::UnixListener> {
     env_sock_path()
         .inspect(|path: &PathBuf| {
             log::trace!("found path in SAND_SOCK_PATH: {:?}", path);
@@ -79,13 +77,13 @@ fn get_socket() -> io::Result<UnixListener> {
                 }
             }
         })
-        .map(UnixListener::bind)
+        .map(tokio::net::UnixListener::bind)
         .unwrap_or_else(|| {
             let fd = get_fd();
             let std_listener: unix::net::UnixListener =
                 unsafe { unix::net::UnixListener::from_raw_fd(fd) };
             std_listener.set_nonblocking(true)?;
-            UnixListener::from_std(std_listener)
+            tokio::net::UnixListener::from_std(std_listener)
         })
 }
 
@@ -125,7 +123,7 @@ async fn daemon() -> io::Result<()> {
     });
 
     // handle client connections
-    let listener: UnixListener = get_socket()?;
+    let listener: tokio::net::UnixListener = get_socket()?;
     log::info!("Daemon started.");
     accept_loop(listener, ctx).await;
 }
@@ -134,7 +132,7 @@ async fn daemon() -> io::Result<()> {
 // Worker tasks
 /////////////////////////////////////////////////////////////////////////////////////////
 
-async fn notifier_thread(mut elapsed_events: Receiver<ElapsedEvent>) -> ! {
+async fn notifier_thread(mut elapsed_events: mpsc::Receiver<ElapsedEvent>) -> ! {
     let stream_handle = match rodio::OutputStream::try_default() {
         Ok((stream, handle)) => {
             mem::forget(stream);
@@ -191,7 +189,7 @@ async fn notifier_thread(mut elapsed_events: Receiver<ElapsedEvent>) -> ! {
     unreachable!("bug: elapsed_events channel was closed.")
 }
 
-async fn accept_loop(listener: UnixListener, ctx: DaemonCtx) -> ! {
+async fn accept_loop(listener: tokio::net::UnixListener, ctx: DaemonCtx) -> ! {
     log::info!("Starting accept loop");
     loop {
         match listener.accept().await {
