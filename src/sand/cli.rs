@@ -46,11 +46,11 @@ pub enum CliCommand {
     #[clap(alias = "list")]
     Ls,
     /// Pause the timer with the given ID
-    Pause { timer_id: TimerId },
+    Pause { timer_ids: Vec<TimerId> },
     /// Resume the timer with the given ID
-    Resume { timer_id: TimerId },
+    Resume { timer_ids: Vec<TimerId> },
     /// Cancel the timer with the given ID
-    Cancel { timer_id: TimerId },
+    Cancel { timer_ids: Vec<TimerId> },
 
     /// Launch the daemon
     Daemon(DaemonArgs),
