@@ -1,12 +1,11 @@
+mod daemon_connection;
+
 use std::fmt::{self, Display, Formatter};
-use std::io::{self, BufRead, BufReader, LineWriter, Write};
-use std::os::unix::net::UnixStream;
-use std::path::PathBuf;
+use std::io;
 use std::time::Duration;
 
-use serde::Deserialize;
-
 use crate::cli;
+use crate::client::daemon_connection::DaemonConnection;
 use crate::sand::cli::StartArgs;
 use crate::sand::duration::DurationExt;
 use crate::sand::message::{
@@ -14,35 +13,6 @@ use crate::sand::message::{
 };
 use crate::sand::socket;
 use crate::sand::timer::{TimerId, TimerInfoForClient, TimerState};
-
-struct DaemonConnection {
-    read: BufReader<UnixStream>,
-    write: LineWriter<UnixStream>,
-}
-
-impl DaemonConnection {
-    fn new(sock_path: PathBuf) -> io::Result<Self> {
-        let stream = UnixStream::connect(sock_path)?;
-
-        let read = BufReader::new(stream.try_clone()?);
-        let write = LineWriter::new(stream);
-
-        Ok(Self { read, write })
-    }
-
-    fn send(&mut self, cmd: Command) -> io::Result<()> {
-        let str = serde_json::to_string(&cmd).expect("failed to serialize Command {cmd}");
-        writeln!(self.write, "{str}")
-    }
-
-    fn recv<T: for<'de> Deserialize<'de>>(&mut self) -> io::Result<T> {
-        let mut recv_buf = String::with_capacity(128);
-        self.read.read_line(&mut recv_buf)?;
-        let resp: T = serde_json::from_str(&recv_buf)
-            .expect("Bug: failed to deserialize response from daemon");
-        Ok(resp)
-    }
-}
 
 #[derive(Debug)]
 enum ClientError {
@@ -135,24 +105,19 @@ pub fn main(cmd: cli::CliCommand) -> io::Result<()> {
         }
     };
 
-    let command_result = handle_command(cmd, conn);
-    match command_result {
+    match handle_cli_command(cmd, conn) {
         Ok(()) => Ok(()),
         Err(_) => std::process::exit(1),
     }
 }
 
-fn handle_command(cmd: cli::CliCommand, mut conn: DaemonConnection) -> ClientResult<()> {
-    // TODO: make sure to parse Error Messages. we should prob move sending,
-    // receiving, and parsing fully into DaemonConnection, and present
-    // Command -> Result<CmdResponse, Error> type api
-
+/// Handles a CLI command by sending it to the daemon and processing the response.
+///
+/// this function will handle all printing of success and errors. The returned result
+/// does not need to be displayed, and is only used to determine the exit code.
+fn handle_cli_command(cmd: cli::CliCommand, mut conn: DaemonConnection) -> ClientResult<()> {
     // TODO: for multi-id commands, it's a bit wack to only return one of the errors.
-    // This needs to be re-worked somehow. I think the problem is that we're
-    // conceptually mixing up client cli commands with message protocol commands.
-    //
-    // I think we need to extract a daemon_connection.rs module that presents exactly
-    // the message protocol interface
+    // This needs to be re-worked somehow.
 
     // TODO: support passing multiple IDs in protocol
     match cmd {
