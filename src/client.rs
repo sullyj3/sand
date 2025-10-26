@@ -111,28 +111,32 @@ fn handle_command(cmd: cli::CliCommand, mut conn: DaemonConnection) -> io::Resul
     // receiving, and parsing fully into DaemonConnection, and present
     // Command -> Result<CmdResponse, Error> type api
     match cmd {
-        cli::CliCommand::Start(StartArgs { durations }) => {
-            let dur: Duration = durations.iter().sum();
-            conn.send(Command::AddTimer {
-                duration: dur.as_millis() as u64,
-            })?;
-            let AddTimerResponse::Ok { id } = conn.recv::<AddTimerResponse>()?;
-
-            let dur_string = dur.format_colon_separated();
-            println!("Timer {id} created for {dur_string}.");
-            Ok(())
-        }
-        cli::CliCommand::Ls => {
-            conn.send(Command::List)?;
-            let ListResponse::Ok { timers } = conn.recv::<ListResponse>()?;
-            print!("{}", display_timer_info(timers));
-            Ok(())
-        }
+        cli::CliCommand::Start(StartArgs { durations }) => start(&mut conn, durations),
+        cli::CliCommand::Ls => ls(&mut conn),
         cli::CliCommand::Pause { timer_id } => pause(&mut conn, timer_id),
         cli::CliCommand::Resume { timer_id } => resume(&mut conn, timer_id),
         cli::CliCommand::Cancel { timer_id } => cancel(&mut conn, timer_id),
         cli::CliCommand::Daemon(_) => unreachable!("handled in top level main"),
     }
+}
+
+fn start(conn: &mut DaemonConnection, durations: Vec<Duration>) -> Result<(), io::Error> {
+    let dur: Duration = durations.iter().sum();
+    conn.send(Command::AddTimer {
+        duration: dur.as_millis() as u64,
+    })?;
+    let AddTimerResponse::Ok { id } = conn.recv::<AddTimerResponse>()?;
+
+    let dur_string = dur.format_colon_separated();
+    println!("Timer {id} created for {dur_string}.");
+    Ok(())
+}
+
+fn ls(conn: &mut DaemonConnection) -> Result<(), io::Error> {
+    conn.send(Command::List)?;
+    let ListResponse::Ok { timers } = conn.recv::<ListResponse>()?;
+    print!("{}", display_timer_info(timers));
+    Ok(())
 }
 
 fn pause(conn: &mut DaemonConnection, timer_id: TimerId) -> Result<(), io::Error> {
