@@ -55,6 +55,7 @@ where
     use std::fs::File;
     let file = File::open(path)?;
 
+    // TODO remove unwrap
     let decoder = Decoder::try_from(file).unwrap();
     let buf = decoder.buffered();
     Ok(buf)
@@ -69,20 +70,35 @@ fn sand_user_data_dir() -> SoundLoadResult<PathBuf> {
 }
 
 fn user_sound_path() -> SoundLoadResult<PathBuf> {
-    let path = sand_user_data_dir()?
-        .join(SOUND_FILENAME)
-        .with_extension("flac");
+    let path = sand_user_data_dir()?.join(SOUND_FILENAME);
     Ok(path)
 }
 
 fn load_user_sound() -> SoundLoadResult<Sound> {
-    let path = user_sound_path()?;
-    log::debug!("Attempting to user load sound from {}", path.display());
-    let sound = load_sound(&path);
-    if sound.is_ok() {
-        log::info!("Loaded user sound from {}", path.display());
-    }
-    sound
+    let path_no_extension = user_sound_path()?;
+    log::debug!(
+        "Attempting to load user sound from {}.*",
+        path_no_extension.display()
+    );
+    // TODO .ogg doesn't seem to be working
+    const SUPPORTED_EXTENSIONS: &[&str] = &["mp3", "wav", "flac", "aac", "m4a", "ogg"];
+    SUPPORTED_EXTENSIONS
+        .iter()
+        .find_map(|extension| {
+            log::trace!("Trying extension: {}", extension);
+            let path = path_no_extension.with_extension(extension);
+            match load_sound(&path) {
+                Ok(sound) => {
+                    log::info!("Loaded user sound from {}", path.display());
+                    Some(Ok(sound))
+                }
+                Err(err) => match err {
+                    SoundLoadError::NotFound => None,
+                    _ => Some(Err(err)),
+                },
+            }
+        })
+        .unwrap_or(Err(SoundLoadError::NotFound))
 }
 
 fn default_sound_path() -> PathBuf {
