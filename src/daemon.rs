@@ -1,3 +1,4 @@
+mod audio;
 mod ctx;
 mod handle_client;
 
@@ -14,9 +15,9 @@ use tokio::sync::mpsc;
 use tokio::sync::Notify;
 
 use crate::cli;
-use crate::sand::audio::ElapsedSoundPlayer;
 use crate::sand::socket::env_sock_path;
 use crate::sand::timer::TimerId;
+use audio::ElapsedSoundPlayer;
 use ctx::DaemonCtx;
 use handle_client::handle_client;
 

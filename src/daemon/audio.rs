@@ -1,4 +1,3 @@
-// TODO this module should probably be in daemon
 use std::fmt::Debug;
 use std::fmt::{self, Display, Formatter};
 use std::fs::File;
