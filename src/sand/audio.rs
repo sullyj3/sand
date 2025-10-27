@@ -1,11 +1,14 @@
+// TODO this module should probably be in daemon
 use std::convert::AsRef;
 use std::fmt::Debug;
 use std::fmt::{self, Display, Formatter};
-use std::io::{self, ErrorKind, Read};
+use std::fs::File;
+use std::io::{self, BufReader, ErrorKind};
 use std::path::{Path, PathBuf};
 use std::sync::Arc;
 
-use rodio::OutputStream;
+use rodio::source::Buffered;
+use rodio::{Decoder, OutputStream, Source};
 
 use crate::sand::PKGNAME;
 
@@ -43,38 +46,18 @@ impl From<io::Error> for SoundLoadError {
 
 type SoundLoadResult<T> = Result<T, SoundLoadError>;
 
-#[derive(Debug, Clone)]
-#[repr(transparent)]
-pub struct SoundHandle {
-    data: Arc<[u8]>,
-}
+type Sound = Buffered<Decoder<BufReader<File>>>;
 
-impl AsRef<[u8]> for SoundHandle {
-    fn as_ref(&self) -> &[u8] {
-        &self.data
-    }
-}
+fn load_sound<P>(path: P) -> SoundLoadResult<Sound>
+where
+    P: AsRef<Path>,
+{
+    use std::fs::File;
+    let file = File::open(path)?;
 
-impl SoundHandle {
-    pub fn load<P>(path: P) -> SoundLoadResult<Self>
-    where
-        P: AsRef<Path>,
-    {
-        use std::fs::File;
-        let mut buf = Vec::with_capacity(1_000_000);
-        File::open(path)?.read_to_end(&mut buf)?;
-        Ok(Self {
-            data: Arc::from(buf),
-        })
-    }
-
-    pub fn cursor(&self) -> io::Cursor<Self> {
-        io::Cursor::new(self.clone())
-    }
-
-    pub fn decoder(&self) -> rodio::Decoder<io::Cursor<Self>> {
-        rodio::Decoder::new(self.cursor()).expect("Failed to decode the sound")
-    }
+    let decoder = Decoder::try_from(file).unwrap();
+    let buf = decoder.buffered();
+    Ok(buf)
 }
 
 const SOUND_FILENAME: &str = "timer_sound";
@@ -92,10 +75,10 @@ fn user_sound_path() -> SoundLoadResult<PathBuf> {
     Ok(path)
 }
 
-fn load_user_sound() -> SoundLoadResult<SoundHandle> {
+fn load_user_sound() -> SoundLoadResult<Sound> {
     let path = user_sound_path()?;
     log::debug!("Attempting to user load sound from {}", path.display());
-    let sound = SoundHandle::load(&path);
+    let sound = load_sound(&path);
     if sound.is_ok() {
         log::info!("Loaded user sound from {}", path.display());
     }
@@ -115,17 +98,17 @@ fn default_sound_path() -> PathBuf {
     path
 }
 
-fn load_default_sound() -> SoundLoadResult<SoundHandle> {
+fn load_default_sound() -> SoundLoadResult<Sound> {
     log::debug!("Attempting to load sound from default path");
     let path = default_sound_path();
-    let sound = SoundHandle::load(&path);
+    let sound = load_sound(&path);
     if sound.is_ok() {
         log::info!("Loaded default sound from {}", path.display());
     }
     sound
 }
 
-fn load_elapsed_sound() -> SoundLoadResult<SoundHandle> {
+fn load_elapsed_sound() -> SoundLoadResult<Sound> {
     match load_user_sound() {
         Ok(sound) => Ok(sound),
         Err(err) => match &err {
@@ -147,7 +130,7 @@ fn load_elapsed_sound() -> SoundLoadResult<SoundHandle> {
 
 #[derive(Clone)]
 pub struct ElapsedSoundPlayer {
-    sound: SoundHandle,
+    sound: Sound,
     output_stream: Arc<OutputStream>,
 }
 
@@ -164,7 +147,6 @@ impl ElapsedSoundPlayer {
     }
 
     pub fn play(&self) {
-        let decoder = self.sound.decoder();
-        self.output_stream.mixer().add(decoder);
+        self.output_stream.mixer().add(self.sound.clone());
     }
 }
