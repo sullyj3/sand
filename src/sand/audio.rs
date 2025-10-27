@@ -1,5 +1,4 @@
 // TODO this module should probably be in daemon
-use std::convert::AsRef;
 use std::fmt::Debug;
 use std::fmt::{self, Display, Formatter};
 use std::fs::File;
@@ -52,13 +51,13 @@ type SoundLoadResult<T> = Result<T, SoundLoadError>;
 
 type Sound = Buffered<Decoder<BufReader<File>>>;
 
-fn load_sound<P>(path: P) -> SoundLoadResult<Sound>
-where
-    P: AsRef<Path>,
-{
+fn load_sound(path: &Path) -> SoundLoadResult<Sound> {
     use std::fs::File;
     let file = File::open(path)?;
-
+    log::debug!(
+        "Found sound file at {}, attempting to load",
+        path.to_string_lossy()
+    );
     let decoder =
         Decoder::try_from(file).map_err(|err| SoundLoadError::DecoderError(err.to_string()))?;
     let buf = decoder.buffered();
