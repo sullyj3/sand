@@ -5,8 +5,7 @@ use std::io::{self, ErrorKind, Read};
 use std::path::{Path, PathBuf};
 use std::sync::Arc;
 
-use rodio::OutputStreamHandle;
-use rodio::Source;
+use rodio::OutputStream;
 
 use crate::sand::PKGNAME;
 
@@ -146,26 +145,26 @@ fn load_elapsed_sound() -> SoundLoadResult<SoundHandle> {
     }
 }
 
-// Trying to update rodio 0.20 -> 0.21, OutputStreamHandle no longer exists,
-// and OutputStream isn't Clone. Maybe could just stick it in an Arc<Mutex<>>?
-// not sure
 #[derive(Clone)]
 pub struct ElapsedSoundPlayer {
     sound: SoundHandle,
-    handle: OutputStreamHandle,
+    output_stream: Arc<OutputStream>,
 }
 
 impl ElapsedSoundPlayer {
-    pub fn new(handle: OutputStreamHandle) -> SoundLoadResult<Self> {
+    pub fn new(handle: OutputStream) -> SoundLoadResult<Self> {
         load_elapsed_sound()
             .inspect_err(|e| {
                 log::warn!("Error loading the audio file: {}", e);
             })
-            .map(|sound| Self { sound, handle })
+            .map(|sound| Self {
+                sound,
+                output_stream: Arc::new(handle),
+            })
     }
 
-    pub fn play(&self) -> Result<(), rodio::PlayError> {
+    pub fn play(&self) {
         let decoder = self.sound.decoder();
-        self.handle.play_raw(decoder.convert_samples())
+        self.output_stream.mixer().add(decoder);
     }
 }

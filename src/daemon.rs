@@ -3,7 +3,6 @@ mod handle_client;
 
 use notify_rust::Notification;
 use std::io;
-use std::mem;
 use std::os::fd::FromRawFd;
 use std::os::fd::RawFd;
 use std::os::unix;
@@ -136,11 +135,8 @@ async fn daemon(ctx: DaemonCtx, rx_elapsed_events: mpsc::Receiver<ElapsedEvent>)
 /////////////////////////////////////////////////////////////////////////////////////////
 
 async fn notifier_thread(mut elapsed_events: mpsc::Receiver<ElapsedEvent>) -> ! {
-    let stream_handle = match rodio::OutputStream::try_default() {
-        Ok((stream, handle)) => {
-            mem::forget(stream);
-            Some(handle)
-        }
+    let stream = match rodio::OutputStreamBuilder::open_default_stream() {
+        Ok(stream) => Some(stream),
         Err(e) => {
             log::debug!("Failed to initialise OutputStream:\n{:?}", e);
             None
@@ -149,14 +145,10 @@ async fn notifier_thread(mut elapsed_events: mpsc::Receiver<ElapsedEvent>) -> ! 
 
     log::trace!(
         "stream_handle is {}",
-        if stream_handle.is_some() {
-            "some"
-        } else {
-            "none"
-        }
+        if stream.is_some() { "some" } else { "none" }
     );
 
-    let player = stream_handle.and_then(|handle| {
+    let player = stream.and_then(|handle| {
         let elapsed_sound_player = ElapsedSoundPlayer::new(handle);
         log::trace!(
             "elapsed_sound_player is {}",
@@ -227,9 +219,7 @@ pub fn do_notification(player: Option<ElapsedSoundPlayer>, timer_id: TimerId) {
 
     if let Some(ref player) = player {
         log::debug!("playing sound");
-        if let Err(e) = player.play() {
-            log::error!("Error playing timer elapsed sound: {e}");
-        }
+        player.play();
     } else {
         log::debug!("player is None - not playing sound");
     }
