@@ -80,14 +80,14 @@ impl SoundHandle {
 
 const SOUND_FILENAME: &str = "timer_sound";
 
-fn xdg_sand_data_dir() -> SoundLoadResult<PathBuf> {
+fn sand_user_data_dir() -> SoundLoadResult<PathBuf> {
     dirs::data_dir()
         .ok_or(SoundLoadError::DataDirUnsupported)
         .map(|dir| dir.join(PKGNAME))
 }
 
-fn xdg_sound_path() -> SoundLoadResult<PathBuf> {
-    let path = xdg_sand_data_dir()?
+fn user_sound_path() -> SoundLoadResult<PathBuf> {
+    let path = sand_user_data_dir()?
         .join(SOUND_FILENAME)
         .with_extension("flac");
     Ok(path)
@@ -107,7 +107,7 @@ fn default_sound_path() -> PathBuf {
 }
 
 fn load_elapsed_sound() -> SoundLoadResult<SoundHandle> {
-    match xdg_sound_path() {
+    match user_sound_path() {
         Ok(xdg_path) => {
             log::debug!("Attempting to load sound from {}", xdg_path.display());
             let sound = SoundHandle::load(&xdg_path);
