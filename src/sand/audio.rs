@@ -95,7 +95,7 @@ fn user_sound_path() -> SoundLoadResult<PathBuf> {
 
 fn load_user_sound() -> SoundLoadResult<SoundHandle> {
     let path = user_sound_path()?;
-    log::debug!("Attempting to load sound from {}", path.display());
+    log::debug!("Attempting to user load sound from {}", path.display());
     let sound = SoundHandle::load(&path);
     if sound.is_ok() {
         log::info!("Loaded user sound from {}", path.display());
@@ -116,6 +116,16 @@ fn default_sound_path() -> PathBuf {
     path
 }
 
+fn load_default_sound() -> SoundLoadResult<SoundHandle> {
+    log::debug!("Attempting to load sound from default path");
+    let path = default_sound_path();
+    let sound = SoundHandle::load(&path);
+    if sound.is_ok() {
+        log::info!("Loaded default sound from {}", path.display());
+    }
+    sound
+}
+
 fn load_elapsed_sound() -> SoundLoadResult<SoundHandle> {
     match load_user_sound() {
         Ok(sound) => Ok(sound),
@@ -126,13 +136,11 @@ fn load_elapsed_sound() -> SoundLoadResult<SoundHandle> {
             }
             SoundLoadError::NotFound => {
                 log::debug!("User sound not found");
-                log::debug!("Attempting to load sound from default path");
-                SoundHandle::load(default_sound_path())
+                load_default_sound()
             }
             SoundLoadError::DataDirUnsupported => {
                 log::error!("{err}");
-                log::debug!("Attempting to load sound from default path");
-                SoundHandle::load(default_sound_path())
+                load_default_sound()
             }
         },
     }
