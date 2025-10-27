@@ -93,6 +93,16 @@ fn user_sound_path() -> SoundLoadResult<PathBuf> {
     Ok(path)
 }
 
+fn load_user_sound() -> SoundLoadResult<SoundHandle> {
+    let path = user_sound_path()?;
+    log::debug!("Attempting to load sound from {}", path.display());
+    let sound = SoundHandle::load(&path);
+    if sound.is_ok() {
+        log::info!("Loaded user sound from {}", path.display());
+    }
+    sound
+}
+
 fn default_sound_path() -> PathBuf {
     let mut path: PathBuf = if cfg!(debug_assertions) {
         log::info!("target is debug, loading sound relative to current working directory");
@@ -107,28 +117,25 @@ fn default_sound_path() -> PathBuf {
 }
 
 fn load_elapsed_sound() -> SoundLoadResult<SoundHandle> {
-    match user_sound_path() {
-        Ok(xdg_path) => {
-            log::debug!("Attempting to load sound from {}", xdg_path.display());
-            let sound = SoundHandle::load(&xdg_path);
-            if sound.is_ok() {
-                log::info!("Loaded sound from {}", xdg_path.display());
-                return sound;
-            }
-        }
+    match load_user_sound() {
+        Ok(sound) => Ok(sound),
         Err(err) => match &err {
             SoundLoadError::UnexpectedIO(unexpected_io_err) => {
-                log::error!("Unexpected io error: {}", unexpected_io_err);
-                return Err(err);
+                log::error!("While loading user sound: {}", unexpected_io_err);
+                Err(err)
             }
             SoundLoadError::NotFound => {
-                log::debug!("User sound not found.");
+                log::debug!("User sound not found");
+                log::debug!("Attempting to load sound from default path");
+                SoundHandle::load(default_sound_path())
             }
-            SoundLoadError::DataDirUnsupported => log::debug!("{err}"),
+            SoundLoadError::DataDirUnsupported => {
+                log::error!("{err}");
+                log::debug!("Attempting to load sound from default path");
+                SoundHandle::load(default_sound_path())
+            }
         },
     }
-    log::debug!("Attempting to load sound from default path");
-    SoundHandle::load(default_sound_path())
 }
 
 // Trying to update rodio 0.20 -> 0.21, OutputStreamHandle no longer exists,
