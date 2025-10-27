@@ -43,15 +43,16 @@ impl SoundHandle {
     }
 }
 
-// TODO weren't we using opus? look into which is better and whether opus is supported
-const SOUND_FILENAME: &str = "timer_sound.flac";
+const SOUND_FILENAME: &str = "timer_sound";
 
 fn xdg_sand_data_dir() -> Option<PathBuf> {
     Some(dirs::data_dir()?.join(PKGNAME))
 }
 
 fn xdg_sound_path() -> Option<PathBuf> {
-    let path = xdg_sand_data_dir()?.join(SOUND_FILENAME);
+    let path = xdg_sand_data_dir()?
+        .join(SOUND_FILENAME)
+        .with_extension("flac");
     Some(path)
 }
 
@@ -64,6 +65,7 @@ fn default_sound_path() -> PathBuf {
         Path::new("/usr/share").join(PKGNAME)
     };
     path.push(SOUND_FILENAME);
+    path.add_extension("flac");
     path
 }
 
