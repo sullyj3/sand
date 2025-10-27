@@ -15,6 +15,7 @@ use crate::sand::PKGNAME;
 #[derive(Debug)]
 pub(crate) enum SoundLoadError {
     UnexpectedIO(io::Error),
+    DecoderError(String),
     NotFound,
     DataDirUnsupported,
 }
@@ -30,6 +31,9 @@ impl Display for SoundLoadError {
             }
             SoundLoadError::DataDirUnsupported => {
                 write!(f, "System does not support a user data directory")
+            }
+            SoundLoadError::DecoderError(err) => {
+                write!(f, "Decoder error: {}", err)
             }
         }
     }
@@ -55,8 +59,8 @@ where
     use std::fs::File;
     let file = File::open(path)?;
 
-    // TODO remove unwrap
-    let decoder = Decoder::try_from(file).unwrap();
+    let decoder =
+        Decoder::try_from(file).map_err(|err| SoundLoadError::DecoderError(err.to_string()))?;
     let buf = decoder.buffered();
     Ok(buf)
 }
@@ -136,7 +140,7 @@ fn load_elapsed_sound() -> SoundLoadResult<Sound> {
                 log::debug!("User sound not found");
                 load_default_sound()
             }
-            SoundLoadError::DataDirUnsupported => {
+            _ => {
                 log::error!("{err}");
                 load_default_sound()
             }
