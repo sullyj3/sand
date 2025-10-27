@@ -41,11 +41,6 @@ impl SoundHandle {
     pub fn decoder(&self) -> rodio::Decoder<io::Cursor<Self>> {
         rodio::Decoder::new(self.cursor()).expect("Failed to decode the sound")
     }
-
-    pub fn play(&self, output: &OutputStreamHandle) -> Result<(), rodio::PlayError> {
-        let decoder = self.decoder();
-        output.play_raw(decoder.convert_samples())
-    }
 }
 
 // TODO weren't we using opus? look into which is better and whether opus is supported
@@ -106,6 +101,7 @@ impl ElapsedSoundPlayer {
     }
 
     pub fn play(&self) -> Result<(), rodio::PlayError> {
-        self.sound.play(&self.handle)
+        let decoder = self.sound.decoder();
+        self.handle.play_raw(decoder.convert_samples())
     }
 }
