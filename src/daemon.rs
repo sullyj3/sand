@@ -144,30 +144,13 @@ async fn notifier_thread(mut elapsed_events: mpsc::Receiver<ElapsedEvent>) -> ! 
         }
     };
 
-    log::trace!(
-        "stream_handle is {}",
-        if stream.is_some() { "some" } else { "none" }
-    );
-
     let player = stream.and_then(|handle| {
         let elapsed_sound_player = ElapsedSoundPlayer::new(handle);
-        log::trace!(
-            "elapsed_sound_player is {}",
-            if elapsed_sound_player.is_ok() {
-                "ok"
-            } else {
-                "err"
-            }
-        );
         if let Err(e) = &elapsed_sound_player {
             log::debug!("{:?}", e);
         }
         elapsed_sound_player.ok()
     });
-    log::trace!(
-        "player is {}",
-        if player.is_some() { "some" } else { "none" }
-    );
     match player {
         Some(_) => log::debug!("ElapsedSoundPlayer successfully initialized."),
         None => log::warn!(
