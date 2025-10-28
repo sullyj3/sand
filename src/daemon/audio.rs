@@ -153,14 +153,14 @@ pub struct ElapsedSoundPlayer {
 }
 
 impl ElapsedSoundPlayer {
-    pub fn new(handle: OutputStream) -> SoundLoadResult<Self> {
+    pub fn new(stream: OutputStream) -> SoundLoadResult<Self> {
         load_elapsed_sound()
             .inspect_err(|e| {
                 log::warn!("Error loading the audio file: {}", e);
             })
             .map(|sound| Self {
                 sound,
-                output_stream: Arc::new(handle),
+                output_stream: Arc::new(stream),
             })
     }
 

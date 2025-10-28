@@ -144,8 +144,8 @@ async fn notifier_thread(mut elapsed_events: mpsc::Receiver<ElapsedEvent>) -> ! 
         }
     };
 
-    let player = stream.and_then(|handle| {
-        let elapsed_sound_player = ElapsedSoundPlayer::new(handle);
+    let player = stream.and_then(|stream| {
+        let elapsed_sound_player = ElapsedSoundPlayer::new(stream);
         if let Err(e) = &elapsed_sound_player {
             log::debug!("{:?}", e);
         }
