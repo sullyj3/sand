@@ -137,19 +137,16 @@ fn load_default_sound() -> SoundLoadResult<Sound> {
 }
 
 fn load_elapsed_sound() -> SoundLoadResult<Sound> {
-    load_user_sound().or_else(|err| match &err {
-        SoundLoadError::UnexpectedIO(unexpected_io_err) => {
-            log::error!("While loading user sound: {}", unexpected_io_err);
-            Err(err)
+    load_user_sound().or_else(|err| {
+        match &err {
+            SoundLoadError::NotFound => {
+                log::debug!("User sound not found");
+            }
+            _ => {
+                log::error!("Error loading user sound: {err}");
+            }
         }
-        SoundLoadError::NotFound => {
-            log::debug!("User sound not found");
-            load_default_sound()
-        }
-        _ => {
-            log::error!("{err}");
-            load_default_sound()
-        }
+        load_default_sound()
     })
 }
 
