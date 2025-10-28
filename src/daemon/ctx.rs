@@ -27,15 +27,17 @@ pub struct DaemonCtx {
     pub refresh_next_due: Arc<Notify>,
 }
 
-// Used to pause the time keeping task during suspend
+/// Used to pause the time keeping task during suspend
 pub enum KeepTimeState {
     Awake,
-    Sleeping { slept_at: SystemTime },
+    Asleep { slept_at: SystemTime },
 }
 
+/// A signal from logind indicating that the system is about to suspend or has
+/// resumed from suspend.
 enum SuspendSignal {
-    Sleeping,
-    Waking,
+    GoingToSleep,
+    WakingUp,
 }
 
 async fn dbus_suspend_events() -> zbus::Result<impl Stream<Item = SuspendSignal>> {
@@ -55,9 +57,9 @@ async fn dbus_suspend_events() -> zbus::Result<impl Stream<Item = SuspendSignal>
                 .map(|args| {
                     log::trace!("Received PrepareForSleep(start={})", args.start);
                     if args.start {
-                        SuspendSignal::Sleeping
+                        SuspendSignal::GoingToSleep
                     } else {
-                        SuspendSignal::Waking
+                        SuspendSignal::WakingUp
                     }
                 })
                 .ok()
@@ -85,8 +87,8 @@ impl DaemonCtx {
 
         loop {
             state = match state {
-                KeepTimeState::Sleeping { slept_at } => {
-                    self.handle_sleeping_state(&mut suspends_stream, slept_at)
+                KeepTimeState::Asleep { slept_at } => {
+                    self.handle_asleep_state(&mut suspends_stream, slept_at)
                         .await
                 }
                 KeepTimeState::Awake => self.handle_awake_state(&mut suspends_stream).await,
@@ -94,7 +96,7 @@ impl DaemonCtx {
         }
     }
 
-    async fn handle_sleeping_state<S>(
+    async fn handle_asleep_state<S>(
         &self,
         suspends_stream: &mut S,
         slept_at: SystemTime,
@@ -108,11 +110,11 @@ impl DaemonCtx {
         };
 
         // expect to wake
-        let SuspendSignal::Waking = signal else {
+        let SuspendSignal::WakingUp = signal else {
             log::warn!(
                 "Got notification that the system is about to sleep, but we're already sleeping. Ignoring."
             );
-            return KeepTimeState::Sleeping { slept_at };
+            return KeepTimeState::Asleep { slept_at };
         };
 
         let woke_at = SystemTime::now();
@@ -280,15 +282,15 @@ impl DaemonCtx {
 fn handle_suspend_signal_awake_state(signal: SuspendSignal) -> KeepTimeState {
     // expect to sleep
     match signal {
-        SuspendSignal::Waking => {
+        SuspendSignal::WakingUp => {
             log::warn!(
                 "Got notification that the system is waking up, but we're already awake. Ignoring."
             );
             KeepTimeState::Awake
         }
-        SuspendSignal::Sleeping => {
+        SuspendSignal::GoingToSleep => {
             log::info!("System is preparing to sleep.");
-            KeepTimeState::Sleeping {
+            KeepTimeState::Asleep {
                 slept_at: SystemTime::now(),
             }
         }
