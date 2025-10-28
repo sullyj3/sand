@@ -136,28 +136,15 @@ async fn daemon(ctx: DaemonCtx, rx_elapsed_events: mpsc::Receiver<ElapsedEvent>)
 /////////////////////////////////////////////////////////////////////////////////////////
 
 async fn notifier_thread(mut elapsed_events: mpsc::Receiver<ElapsedEvent>) -> ! {
-    let stream = match rodio::OutputStreamBuilder::open_default_stream() {
-        Ok(stream) => Some(stream),
-        Err(e) => {
-            log::debug!("Failed to initialise OutputStream:\n{:?}", e);
-            None
-        }
-    };
-
-    let player = stream.and_then(|stream| {
-        let elapsed_sound_player = ElapsedSoundPlayer::new(stream);
-        if let Err(e) = &elapsed_sound_player {
-            log::debug!("{:?}", e);
-        }
-        elapsed_sound_player.ok()
-    });
-    match player {
-        Some(_) => log::debug!("ElapsedSoundPlayer successfully initialized."),
-        None => log::warn!(
-            "Failed to initialize elapsed sound player.\n\
-                There will be no timer sounds."
-        ),
-    }
+    let player = ElapsedSoundPlayer::new()
+        .inspect(|_| log::debug!("ElapsedSoundPlayer successfully initialized."))
+        .inspect_err(|_| {
+            log::warn!(
+                "Failed to initialize elapsed sound player.\n\
+                        There will be no timer sounds."
+            )
+        })
+        .ok();
 
     while let Some(ElapsedEvent(timer_id)) = elapsed_events.recv().await {
         let player = player.clone();

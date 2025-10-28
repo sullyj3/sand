@@ -16,6 +16,7 @@ pub(crate) enum SoundLoadError {
     DecoderError(String),
     NotFound,
     DataDirUnsupported,
+    StreamError(rodio::StreamError),
 }
 
 impl Display for SoundLoadError {
@@ -33,6 +34,9 @@ impl Display for SoundLoadError {
             SoundLoadError::DecoderError(err) => {
                 write!(f, "Decoder error: {}", err)
             }
+            SoundLoadError::StreamError(err) => {
+                write!(f, "Failed to initialize OutputStream: {}", err)
+            }
         }
     }
 }
@@ -43,6 +47,12 @@ impl From<io::Error> for SoundLoadError {
             ErrorKind::NotFound => SoundLoadError::NotFound,
             _ => SoundLoadError::UnexpectedIO(error),
         }
+    }
+}
+
+impl From<rodio::StreamError> for SoundLoadError {
+    fn from(error: rodio::StreamError) -> Self {
+        SoundLoadError::StreamError(error)
     }
 }
 
@@ -127,23 +137,20 @@ fn load_default_sound() -> SoundLoadResult<Sound> {
 }
 
 fn load_elapsed_sound() -> SoundLoadResult<Sound> {
-    match load_user_sound() {
-        Ok(sound) => Ok(sound),
-        Err(err) => match &err {
-            SoundLoadError::UnexpectedIO(unexpected_io_err) => {
-                log::error!("While loading user sound: {}", unexpected_io_err);
-                Err(err)
-            }
-            SoundLoadError::NotFound => {
-                log::debug!("User sound not found");
-                load_default_sound()
-            }
-            _ => {
-                log::error!("{err}");
-                load_default_sound()
-            }
-        },
-    }
+    load_user_sound().or_else(|err| match &err {
+        SoundLoadError::UnexpectedIO(unexpected_io_err) => {
+            log::error!("While loading user sound: {}", unexpected_io_err);
+            Err(err)
+        }
+        SoundLoadError::NotFound => {
+            log::debug!("User sound not found");
+            load_default_sound()
+        }
+        _ => {
+            log::error!("{err}");
+            load_default_sound()
+        }
+    })
 }
 
 #[derive(Clone)]
@@ -153,7 +160,10 @@ pub struct ElapsedSoundPlayer {
 }
 
 impl ElapsedSoundPlayer {
-    pub fn new(stream: OutputStream) -> SoundLoadResult<Self> {
+    pub fn new() -> SoundLoadResult<Self> {
+        let stream = rodio::OutputStreamBuilder::open_default_stream()
+            .inspect_err(|e| log::debug!("{e}"))?;
+
         load_elapsed_sound()
             .inspect_err(|e| {
                 log::warn!("Error loading the audio file: {}", e);
