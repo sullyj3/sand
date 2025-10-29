@@ -74,6 +74,7 @@ pub fn main(cli_cmd: cli::CliCommand) -> io::Result<()> {
         cli::CliCommand::Pause { timer_ids } => pause(&mut conn, timer_ids),
         cli::CliCommand::Resume { timer_ids } => resume(&mut conn, timer_ids),
         cli::CliCommand::Cancel { timer_ids } => cancel(&mut conn, timer_ids),
+        // TODO is it possible to split out a separate ClientCommand from CliCommand?
         cli::CliCommand::Daemon(_) => unreachable!("handled in top level main"),
     };
     // the individual command handler functions do all printing of success and
