@@ -101,7 +101,7 @@ fn ls(conn: &mut DaemonConnection) -> ClientResult<()> {
     match conn.list() {
         Ok(resp) => {
             let ListResponse::Ok { timers } = resp;
-            print!("{}", ui::display_timer_info(timers));
+            print!("{}", ui::ls(timers));
             Ok(())
         }
         Err(err) => {

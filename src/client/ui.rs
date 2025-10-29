@@ -5,7 +5,7 @@ use crate::sand::{
     timer::{TimerInfoForClient, TimerState},
 };
 
-pub fn display_timer_info(mut timers: Vec<TimerInfoForClient>) -> String {
+pub fn ls(mut timers: Vec<TimerInfoForClient>) -> String {
     if timers.len() == 0 {
         return "There are currently no timers.\n".into();
     };
@@ -25,13 +25,13 @@ pub fn display_timer_info(mut timers: Vec<TimerInfoForClient>) -> String {
     };
     let mut output = String::new();
     if running.len() > 0 {
-        display_timer_info_table(&mut output, first_column_width, &running);
+        timers_table(&mut output, first_column_width, &running);
         if paused.len() > 0 {
             output.push_str("\n");
         }
     }
     if paused.len() > 0 {
-        display_timer_info_table(&mut output, first_column_width, &paused);
+        timers_table(&mut output, first_column_width, &paused);
     }
 
     output
@@ -40,19 +40,18 @@ pub fn display_timer_info(mut timers: Vec<TimerInfoForClient>) -> String {
 /// Display a table of timer information. For use by `sand ls`
 ///
 /// Used separately for running and paused timers.
-fn display_timer_info_table(
+fn timers_table(
     output: &mut String,
     first_column_width: usize,
     timers: &[&TimerInfoForClient],
 ) -> () {
     for &timer in timers {
-        output.push_str(&display_timerinfo(timer, first_column_width));
+        output.push_str(&timers_table_row(timer, first_column_width));
         output.push('\n');
     }
 }
 
-// TODO rename
-pub fn display_timerinfo(timer_info: &TimerInfoForClient, first_column_width: usize) -> String {
+pub fn timers_table_row(timer_info: &TimerInfoForClient, first_column_width: usize) -> String {
     let remaining: String =
         Duration::from_millis(timer_info.remaining_millis).format_colon_separated();
     let id = timer_info.id;
