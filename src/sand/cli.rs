@@ -40,6 +40,15 @@ pub struct StartArgs {
 
 #[derive(Subcommand, Clone)]
 pub enum CliCommand {
+    /// Launch the daemon
+    Daemon(DaemonArgs),
+
+    #[clap(flatten)]
+    ClientCommand(ClientCommand),
+}
+
+#[derive(Subcommand, Clone)]
+pub enum ClientCommand {
     /// Start a new timer for the given duration
     Start(StartArgs),
     /// List active timers
@@ -51,7 +60,4 @@ pub enum CliCommand {
     Resume { timer_ids: Vec<TimerId> },
     /// Cancel the timer with the given ID
     Cancel { timer_ids: Vec<TimerId> },
-
-    /// Launch the daemon
-    Daemon(DaemonArgs),
 }

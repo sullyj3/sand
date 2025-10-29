@@ -15,6 +15,6 @@ fn main() -> io::Result<()> {
 
     match cli.command() {
         CliCommand::Daemon(args) => daemon::main(args),
-        cmd => client::main(cmd),
+        CliCommand::ClientCommand(cmd) => client::main(cmd),
     }
 }

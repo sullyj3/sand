@@ -48,7 +48,7 @@ type ClientResult<T> = Result<T, ClientError>;
 // Main
 /////////////////////////////////////////////////////////////////////////////////////////
 
-pub fn main(cli_cmd: cli::CliCommand) -> io::Result<()> {
+pub fn main(cli_cmd: cli::ClientCommand) -> io::Result<()> {
     let Some(sock_path) = socket::get_sock_path() else {
         eprintln!("socket not provided and runtime directory does not exist.");
         eprintln!("no socket to use.");
@@ -68,15 +68,13 @@ pub fn main(cli_cmd: cli::CliCommand) -> io::Result<()> {
 
     // TODO: support passing multiple IDs in protocol
     let result: ClientResult<()> = match cli_cmd {
-        cli::CliCommand::Start(StartArgs { durations }) => {
+        cli::ClientCommand::Start(StartArgs { durations }) => {
             start(&mut conn, durations).inspect_err(|err| eprintln!("{err}"))
         }
-        cli::CliCommand::Ls => ls(&mut conn),
-        cli::CliCommand::Pause { timer_ids } => pause(&mut conn, timer_ids),
-        cli::CliCommand::Resume { timer_ids } => resume(&mut conn, timer_ids),
-        cli::CliCommand::Cancel { timer_ids } => cancel(&mut conn, timer_ids),
-        // TODO is it possible to split out a separate ClientCommand from CliCommand?
-        cli::CliCommand::Daemon(_) => unreachable!("handled in top level main"),
+        cli::ClientCommand::Ls => ls(&mut conn),
+        cli::ClientCommand::Pause { timer_ids } => pause(&mut conn, timer_ids),
+        cli::ClientCommand::Resume { timer_ids } => resume(&mut conn, timer_ids),
+        cli::ClientCommand::Cancel { timer_ids } => cancel(&mut conn, timer_ids),
     };
     // the individual command handler functions do all printing of success and
     // errors. The result does not need to be displayed, and is only used to determine the exit code.
