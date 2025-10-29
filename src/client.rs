@@ -1,4 +1,5 @@
 mod daemon_connection;
+mod ui;
 
 use std::fmt::{self, Display, Formatter};
 use std::io;
@@ -10,7 +11,7 @@ use crate::sand::cli::StartArgs;
 use crate::sand::duration::DurationExt;
 use crate::sand::message::*;
 use crate::sand::socket;
-use crate::sand::timer::{TimerId, TimerInfoForClient, TimerState};
+use crate::sand::timer::TimerId;
 
 #[derive(Debug)]
 enum ClientError {
@@ -102,7 +103,7 @@ fn ls(conn: &mut DaemonConnection) -> ClientResult<()> {
     match conn.list() {
         Ok(resp) => {
             let ListResponse::Ok { timers } = resp;
-            print!("{}", display_timer_info(timers));
+            print!("{}", ui::display_timer_info(timers));
             Ok(())
         }
         Err(err) => {
@@ -169,54 +170,4 @@ fn cancel(conn: &mut DaemonConnection, timer_ids: Vec<TimerId>) -> ClientResult<
         }
     }
     ret
-}
-
-/////////////////////////////////////////////////////////////////////////////////////////
-// Helpers
-/////////////////////////////////////////////////////////////////////////////////////////
-
-fn display_timer_info(mut timers: Vec<TimerInfoForClient>) -> String {
-    if timers.len() == 0 {
-        return "There are currently no timers.\n".into();
-    };
-
-    timers.sort_by(TimerInfoForClient::cmp_by_next_due);
-    let (running, paused): (Vec<_>, Vec<_>) = timers
-        .iter()
-        .partition(|ti| ti.state == TimerState::Running);
-
-    let first_column_width = {
-        let max_id = timers
-            .iter()
-            .map(|ti| ti.id)
-            .max()
-            .expect("timers.len() != 0");
-        max_id.to_string().len()
-    };
-    let mut output = String::new();
-    if running.len() > 0 {
-        display_timer_info_table(&mut output, first_column_width, &running);
-        if paused.len() > 0 {
-            output.push_str("\n");
-        }
-    }
-    if paused.len() > 0 {
-        display_timer_info_table(&mut output, first_column_width, &paused);
-    }
-
-    output
-}
-
-/// Display a table of timer information. For use by `sand ls`
-///
-/// Used separately for running and paused timers.
-fn display_timer_info_table(
-    output: &mut String,
-    first_column_width: usize,
-    timers: &[&TimerInfoForClient],
-) -> () {
-    for timer in timers {
-        output.push_str(&timer.display(first_column_width));
-        output.push('\n');
-    }
 }
