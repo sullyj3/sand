@@ -7,8 +7,6 @@ use std::{
 use derive_more::FromStr;
 use serde::{Deserialize, Serialize};
 
-use crate::sand::duration::DurationExt;
-
 #[derive(
     PartialEq, Eq, PartialOrd, Ord, Hash, Debug, Clone, Copy, Serialize, Deserialize, FromStr,
 )]
@@ -70,21 +68,6 @@ impl TimerInfoForClient {
             state,
             remaining_millis,
         }
-    }
-
-    pub fn display(&self, first_column_width: usize) -> String {
-        let remaining: String =
-            Duration::from_millis(self.remaining_millis).format_colon_separated();
-        let id = self.id;
-        let play_pause = match self.state {
-            TimerState::Paused => " ⏸ ",
-            TimerState::Running => " ▶ ",
-        };
-        format!(
-            "{play_pause} │ {:>width$} │ {remaining}",
-            id.to_string(),
-            width = first_column_width
-        )
     }
 
     pub fn cmp_by_next_due(t1: &Self, t2: &Self) -> Ordering {

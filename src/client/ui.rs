@@ -1,4 +1,9 @@
-use crate::sand::timer::{TimerInfoForClient, TimerState};
+use std::time::Duration;
+
+use crate::sand::{
+    duration::DurationExt,
+    timer::{TimerInfoForClient, TimerState},
+};
 
 pub fn display_timer_info(mut timers: Vec<TimerInfoForClient>) -> String {
     if timers.len() == 0 {
@@ -40,8 +45,24 @@ fn display_timer_info_table(
     first_column_width: usize,
     timers: &[&TimerInfoForClient],
 ) -> () {
-    for timer in timers {
-        output.push_str(&timer.display(first_column_width));
+    for &timer in timers {
+        output.push_str(&display_timerinfo(timer, first_column_width));
         output.push('\n');
     }
+}
+
+// TODO rename
+pub fn display_timerinfo(timer_info: &TimerInfoForClient, first_column_width: usize) -> String {
+    let remaining: String =
+        Duration::from_millis(timer_info.remaining_millis).format_colon_separated();
+    let id = timer_info.id;
+    let play_pause = match timer_info.state {
+        TimerState::Paused => " ⏸ ",
+        TimerState::Running => " ▶ ",
+    };
+    format!(
+        "{play_pause} │ {:>width$} │ {remaining}",
+        id.to_string(),
+        width = first_column_width
+    )
 }
