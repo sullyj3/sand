@@ -5,6 +5,8 @@ use std::fmt::{self, Display, Formatter};
 use std::io;
 use std::time::Duration;
 
+use indoc::indoc;
+
 use crate::cli;
 use crate::client::daemon_connection::DaemonConnection;
 use crate::sand::cli::StartArgs;
@@ -58,11 +60,14 @@ pub fn main(cli_cmd: cli::ClientCommand) -> io::Result<()> {
     let mut conn = match DaemonConnection::new(&sock_path) {
         Ok(conn) => conn,
         Err(e) => {
-            eprintln!(
-                "Error establishing connection with daemon
-    using the socket `{}`:
-    {e}",
-                sock_path.to_string_lossy()
+            eprint!(
+                indoc! {"
+                Error establishing connection with daemon
+                    using the socket `{}`:
+                    {}
+                "},
+                sock_path.to_string_lossy(),
+                e
             );
 
             match e.kind() {

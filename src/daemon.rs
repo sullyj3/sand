@@ -2,6 +2,7 @@ mod audio;
 mod ctx;
 mod handle_client;
 
+use indoc::indoc;
 use notify_rust::Notification;
 use std::io;
 use std::os::fd::FromRawFd;
@@ -70,9 +71,10 @@ fn get_socket() -> io::Result<tokio::net::UnixListener> {
                     }
                 } else {
                     log::error!(
-                        "SAND_SOCK_PATH {:?} exists but is not a socket.\n\
-                         (type: {:?})\n\
-                         Refusing to overwrite — please remove or change SAND_SOCK_PATH.",
+                        indoc! {"
+                        SAND_SOCK_PATH {:?} exists but is not a socket.
+                            (type: {:?})
+                        Refusing to overwrite — please remove or change SAND_SOCK_PATH."},
                         path,
                         meta.file_type()
                     );
@@ -139,10 +141,9 @@ async fn notifier_thread(mut elapsed_events: mpsc::Receiver<ElapsedEvent>) -> ! 
     let player = ElapsedSoundPlayer::new()
         .inspect(|_| log::debug!("ElapsedSoundPlayer successfully initialized."))
         .inspect_err(|_| {
-            log::warn!(
-                "Failed to initialize elapsed sound player.\n\
-                        There will be no timer sounds."
-            )
+            log::warn!(indoc! {"
+                Failed to initialize elapsed sound player.
+                There will be no timer sounds."})
         })
         .ok();
 
