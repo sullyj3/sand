@@ -1,11 +1,11 @@
-use std::time::Duration;
+use std::{fmt::Display, time::Duration};
 
 use crate::sand::{
     duration::DurationExt,
     timer::{TimerInfoForClient, TimerState},
 };
 
-pub fn ls(mut timers: Vec<TimerInfoForClient>) -> String {
+pub fn ls(mut timers: Vec<TimerInfoForClient>) -> impl Display {
     if timers.len() == 0 {
         return "There are currently no timers.\n".into();
     };
