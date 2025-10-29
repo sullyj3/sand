@@ -3,7 +3,7 @@ use crate::sand::timer::TimerId;
 use serde::Deserialize;
 use std::io::{self, BufRead, BufReader, LineWriter, Write};
 use std::os::unix::net::UnixStream;
-use std::path::PathBuf;
+use std::path::Path;
 use std::time::Duration;
 
 pub struct DaemonConnection {
@@ -12,7 +12,7 @@ pub struct DaemonConnection {
 }
 
 impl DaemonConnection {
-    pub fn new(sock_path: PathBuf) -> io::Result<Self> {
+    pub fn new(sock_path: impl AsRef<Path>) -> io::Result<Self> {
         let stream = UnixStream::connect(sock_path)?;
 
         let read = BufReader::new(stream.try_clone()?);

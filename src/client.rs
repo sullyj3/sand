@@ -55,10 +55,24 @@ pub fn main(cli_cmd: cli::ClientCommand) -> io::Result<()> {
         std::process::exit(1)
     };
 
-    let mut conn = match DaemonConnection::new(sock_path) {
+    let mut conn = match DaemonConnection::new(&sock_path) {
         Ok(conn) => conn,
         Err(e) => {
-            eprintln!("Error establishing connection with daemon: {e}");
+            eprintln!(
+                "Error establishing connection with daemon
+    using the socket `{}`:
+    {e}",
+                sock_path.to_string_lossy()
+            );
+
+            match e.kind() {
+                io::ErrorKind::ConnectionRefused => {
+                    eprintln!("");
+                    eprintln!("Is the daemon running?");
+                }
+                _ => {}
+            }
+
             std::process::exit(1);
         }
     };
