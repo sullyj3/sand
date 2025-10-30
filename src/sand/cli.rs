@@ -1,17 +1,29 @@
 use std::time::Duration;
 
 use clap::{Args, Parser, Subcommand};
+use indoc::indoc;
 
 use crate::sand::{self, timer::TimerId};
 
 #[derive(Args, Clone)]
 pub struct DaemonArgs {}
 
-const AFTER_HELP: &str = "To use a custom timer sound, place a flac at
+// TODO better header formatting to match the clap generated help
+const AFTER_HELP: &str = indoc! {"
+SHORTER COMMAND ALIASES
+    You can use any prefix of a subcommand, as long as it is unambiguous. For
+    example:
+        `sand s 10m` is equivalent to `sand start 10m`.
+        `sand l` is equivalent to `sand list`.
+        `sand p 1` is equivalent to `sand pause 1`.
 
-    $XDG_DATA_HOME/sand-timer/timer_sound.flac.
+CUSTOM SOUNDS
+    To use a custom timer sound, place an audio file at
 
-XDG_DATA_HOME defaults to ~/.local/share/";
+        $XDG_DATA_HOME/sand-timer/timer_sound.{mp3,wav,flac,aac,m4a}.
+
+    XDG_DATA_HOME defaults to ~/.local/share/"
+};
 
 #[derive(Parser)]
 #[command(
@@ -54,12 +66,15 @@ pub enum ClientCommand {
     /// List active timers
     #[clap(alias = "list")]
     Ls,
-    /// Show the next due running timer, if any
+    /// Show the next due running timer if any, exit failure otherwise.
+    ///
+    /// This can be useful for scripting or usage in other programs, such as
+    /// starship.
     NextDue,
-    /// Pause the timer with the given ID
+    /// Pause the timers with the given IDs
     Pause { timer_ids: Vec<TimerId> },
-    /// Resume the timer with the given ID
+    /// Resume the timers with the given IDs
     Resume { timer_ids: Vec<TimerId> },
-    /// Cancel the timer with the given ID
+    /// Cancel the timers with the given IDs
     Cancel { timer_ids: Vec<TimerId> },
 }
