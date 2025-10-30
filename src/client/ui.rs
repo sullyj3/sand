@@ -81,33 +81,27 @@ pub fn ls(mut timers: Vec<TimerInfoForClient>) -> impl Display {
     .unwrap();
 
     if running.len() > 0 {
-        timers_table(&mut output, &table_config, running);
+        for timer in running {
+            timers_table_row(&mut output, timer, &table_config);
+        }
         if paused.len() > 0 {
             output.push_str("\n");
         }
     }
     if paused.len() > 0 {
-        timers_table(&mut output, &table_config, paused);
+        for timer in paused {
+            timers_table_row(&mut output, timer, &table_config);
+        }
     }
 
     output
 }
 
-/// Display a table of timer information. For use by `sand ls`
-///
-/// Used separately for running and paused timers.
-fn timers_table<'a>(
+fn timers_table_row(
     output: &mut impl Write,
+    timer_info: &TimerInfoForClient,
     table_config: &TableConfig,
-    timers: impl IntoIterator<Item = &'a TimerInfoForClient>,
 ) {
-    for timer in timers {
-        let row = timers_table_row(timer, table_config);
-        write!(output, "{row}\n").expect("Write failed");
-    }
-}
-
-fn timers_table_row(timer_info: &TimerInfoForClient, table_config: &TableConfig) -> String {
     let remaining: String =
         Duration::from_millis(timer_info.remaining_millis).format_colon_separated();
     let id = timer_info.id;
@@ -121,11 +115,11 @@ fn timers_table_row(timer_info: &TimerInfoForClient, table_config: &TableConfig)
         remaining_column_width,
         gap,
     } = table_config;
-    let s = format!(
-        "{play_pause:>status_column_width$}{gap}{:>id_column_width$}{gap}{remaining:>remaining_column_width$}",
+    write!(output,
+        "{play_pause:>status_column_width$}{gap}{:>id_column_width$}{gap}{remaining:>remaining_column_width$}\n",
+        // need the string conversion first for the padding to work
         id.to_string(),
-    );
-    s
+    ).unwrap();
 }
 
 pub fn next_due(timer: &TimerInfoForClient) -> impl Display {
