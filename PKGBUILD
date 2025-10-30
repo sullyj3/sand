@@ -24,18 +24,10 @@ pkgver() {
 
 build() {
     cd "$srcdir/${_pkgname}"
-    cargo build --release
+    make
 }
 
 package() {
     cd "$srcdir/${_pkgname}"
-    install -Dm755 target/release/sand ${pkgdir}/usr/bin/sand
-
-    install -Dm644 README.md "${pkgdir}/usr/share/doc/${_pkgname}/README.md"
-    install -Dm644 LICENSE "${pkgdir}/usr/share/licenses/${_pkgname}/LICENSE"
-
-    install -Dm644 resources/systemd/sand.socket "${pkgdir}/usr/lib/systemd/user/sand.socket"
-    install -Dm644 <(sed 's|@prefix@|/usr|' resources/systemd/sand.service.in) "${pkgdir}/usr/lib/systemd/user/sand.service"
-
-    install -Dm644 resources/timer_sound.flac "${pkgdir}/usr/share/${_pkgname}/timer_sound.flac"
+    make DESTDIR="${pkgdir}" PREFIX="/usr" install
 }
