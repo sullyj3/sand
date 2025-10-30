@@ -54,6 +54,8 @@ pub enum ClientCommand {
     /// List active timers
     #[clap(alias = "list")]
     Ls,
+    /// Show the next due running timer, if any
+    NextDue,
     /// Pause the timer with the given ID
     Pause { timer_ids: Vec<TimerId> },
     /// Resume the timer with the given ID

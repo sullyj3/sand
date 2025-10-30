@@ -65,3 +65,11 @@ pub fn timers_table_row(timer_info: &TimerInfoForClient, first_column_width: usi
         width = first_column_width
     )
 }
+
+pub fn next_due(timer: &TimerInfoForClient) -> impl Display {
+    format!(
+        "Timer {}: {} left\n",
+        timer.id,
+        Duration::from_millis(timer.remaining_millis).format_colon_separated()
+    )
+}

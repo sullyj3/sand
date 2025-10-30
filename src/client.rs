@@ -13,7 +13,7 @@ use crate::sand::cli::StartArgs;
 use crate::sand::duration::DurationExt;
 use crate::sand::message::*;
 use crate::sand::socket;
-use crate::sand::timer::TimerId;
+use crate::sand::timer::{TimerId, TimerInfoForClient};
 
 #[derive(Debug)]
 enum ClientError {
@@ -21,6 +21,7 @@ enum ClientError {
     TimerNotFound(TimerId),
     AlreadyPaused(TimerId),
     AlreadyRunning(TimerId),
+    NoNextDue,
 }
 
 impl Display for ClientError {
@@ -34,6 +35,7 @@ impl Display for ClientError {
             ClientError::AlreadyRunning(timer_id) => {
                 write!(f, "Timer {timer_id} is already running.")
             }
+            ClientError::NoNextDue => write!(f, "No timers are due."),
         }
     }
 }
@@ -90,6 +92,7 @@ pub fn main(cli_cmd: cli::ClientCommand) -> io::Result<()> {
         cli::ClientCommand::Start(StartArgs { durations }) => {
             start(&mut conn, durations).inspect_err(|err| eprintln!("{err}"))
         }
+        cli::ClientCommand::NextDue => next_due(&mut conn).inspect_err(|err| eprintln!("{err}")),
         cli::ClientCommand::Ls => ls(&mut conn),
         cli::ClientCommand::Pause { timer_ids } => pause(&mut conn, timer_ids),
         cli::ClientCommand::Resume { timer_ids } => resume(&mut conn, timer_ids),
@@ -114,6 +117,28 @@ fn start(conn: &mut DaemonConnection, durations: Vec<Duration>) -> ClientResult<
     let dur_string = dur.format_colon_separated();
     println!("Timer {id} created for {dur_string}.");
     Ok(())
+}
+
+fn next_due(conn: &mut DaemonConnection) -> Result<(), ClientError> {
+    match conn.list() {
+        Ok(resp) => {
+            let ListResponse::Ok { timers } = resp;
+            match timers
+                .iter()
+                .min_by(|t1, t2| TimerInfoForClient::cmp_by_next_due(t1, t2))
+            {
+                Some(timer) => {
+                    print!("{}", ui::next_due(timer));
+                    Ok(())
+                }
+                None => Err(ClientError::NoNextDue),
+            }
+        }
+        Err(err) => {
+            eprintln!("{err}");
+            Err(err.into())
+        }
+    }
 }
 
 fn ls(conn: &mut DaemonConnection) -> ClientResult<()> {
