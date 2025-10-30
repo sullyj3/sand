@@ -51,17 +51,16 @@ impl From<ParseIntError> for GetSocketError {
     }
 }
 
-fn env_fd() -> Option<RawFd> {
-    let str_fd = std::env::var("SAND_SOCKFD").ok()?;
-    let fd = str_fd
-        .parse::<RawFd>()
-        .expect("Error: Found SAND_SOCKFD but couldn't parse it as a string")
-        .into();
-    Some(fd)
+fn env_fd() -> Result<RawFd, GetSocketError> {
+    let str_fd = std::env::var("SAND_SOCKFD")?;
+    let fd = str_fd.parse::<RawFd>().inspect_err(|_err| {
+        log::error!("Error: Found SAND_SOCKFD but couldn't parse it as a string")
+    })?;
+    Ok(fd)
 }
 
 fn get_fd() -> RawFd {
-    match env_fd() {
+    match env_fd().ok() {
         None => {
             log::debug!(
                 "SAND_SOCKFD not found, falling back the default systemd socket file descriptor (3)."
@@ -70,8 +69,7 @@ fn get_fd() -> RawFd {
         }
         Some(fd) => {
             log::debug!("Found SAND_SOCKFD.");
-            fd.try_into()
-                .expect("Error: SAND_SOCKFD is too large to be a file descriptor.")
+            fd
         }
     }
 }
