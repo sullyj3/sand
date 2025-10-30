@@ -23,7 +23,10 @@ pub fn ls(mut timers: Vec<TimerInfoForClient>) -> impl Display {
 
     // TODO sorting and partitioning maybe shouldn't be the UI's
     // responsibility. Move to caller
-    timers.sort_by(TimerInfoForClient::cmp_by_next_due);
+    timers.sort_by(|t1, t2| {
+        TimerInfoForClient::cmp_by_next_due(t1, t2)
+            .then_with(|| TimerInfoForClient::cmp_by_id(t1, t2))
+    });
     let (running, paused): (Vec<_>, Vec<_>) = timers
         .iter()
         .partition(|ti| ti.state == TimerState::Running);

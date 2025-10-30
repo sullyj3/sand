@@ -73,4 +73,8 @@ impl TimerInfoForClient {
     pub fn cmp_by_next_due(t1: &Self, t2: &Self) -> Ordering {
         t1.remaining_millis.cmp(&t2.remaining_millis)
     }
+
+    pub fn cmp_by_id(t1: &Self, t2: &Self) -> Ordering {
+        t1.id.cmp(&t2.id)
+    }
 }
