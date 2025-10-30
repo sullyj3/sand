@@ -13,7 +13,7 @@ use crate::sand::cli::StartArgs;
 use crate::sand::duration::DurationExt;
 use crate::sand::message::*;
 use crate::sand::socket;
-use crate::sand::timer::{TimerId, TimerInfoForClient};
+use crate::sand::timer::{TimerId, TimerInfoForClient, TimerState};
 
 #[derive(Debug)]
 enum ClientError {
@@ -35,7 +35,7 @@ impl Display for ClientError {
             ClientError::AlreadyRunning(timer_id) => {
                 write!(f, "Timer {timer_id} is already running.")
             }
-            ClientError::NoNextDue => write!(f, "No timers are due."),
+            ClientError::NoNextDue => write!(f, "No running timers."),
         }
     }
 }
@@ -125,6 +125,7 @@ fn next_due(conn: &mut DaemonConnection) -> Result<(), ClientError> {
             let ListResponse::Ok { timers } = resp;
             match timers
                 .iter()
+                .filter(|t| t.state == TimerState::Running)
                 .min_by(|t1, t2| TimerInfoForClient::cmp_by_next_due(t1, t2))
             {
                 Some(timer) => {
