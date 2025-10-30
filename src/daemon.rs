@@ -59,6 +59,10 @@ fn env_fd() -> Result<RawFd, GetSocketError> {
     Ok(fd)
 }
 
+fn systemd_socket_activation_fd() -> Result<RawFd, GetSocketError> {
+    Ok(SYSTEMD_SOCKFD)
+}
+
 fn get_fd() -> RawFd {
     env_fd().ok()
         .inspect(|_| log::debug!("Found SAND_SOCKFD"))
@@ -66,8 +70,8 @@ fn get_fd() -> RawFd {
             log::debug!(
                 "SAND_SOCKFD not found, falling back the default systemd socket file descriptor (3)."
             );
-            SYSTEMD_SOCKFD
-        })
+            systemd_socket_activation_fd().unwrap()
+         })
 }
 
 /// Get a UnixListener for accepting client connections.
