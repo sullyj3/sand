@@ -1,37 +1,93 @@
-use std::{fmt::Display, time::Duration};
+use std::fmt::{Display, Write};
+use std::time::Duration;
+
+use crossterm::style::Stylize;
 
 use crate::sand::{
     duration::DurationExt,
     timer::{TimerInfoForClient, TimerState},
 };
 
+#[derive(Debug)]
+struct TableConfig<'a> {
+    status_column_width: usize,
+    id_column_width: usize,
+    remaining_column_width: usize,
+    gap: &'a str,
+}
+
 pub fn ls(mut timers: Vec<TimerInfoForClient>) -> impl Display {
     if timers.len() == 0 {
-        return "There are currently no timers.\n".into();
+        return "There are currently no timers.\n".to_owned();
     };
 
+    // TODO sorting and partitioning maybe shouldn't be the UI's
+    // responsibility. Move to caller
     timers.sort_by(TimerInfoForClient::cmp_by_next_due);
     let (running, paused): (Vec<_>, Vec<_>) = timers
         .iter()
         .partition(|ti| ti.state == TimerState::Running);
 
-    let first_column_width = {
+    let mut output = String::new();
+
+    // statuses are just a single emoji
+    let status_header = "   ";
+    let status_column_width = status_header.len();
+
+    let id_header = "ID";
+    let id_column_width = {
         let max_id = timers
             .iter()
             .map(|ti| ti.id)
             .max()
             .expect("timers.len() != 0");
-        max_id.to_string().len()
+        let max_id_len = max_id.to_string().len();
+        max_id_len.max(id_header.len())
     };
-    let mut output = String::new();
+
+    let remaining_header = "Remaining";
+    let remaining_column_width = {
+        let max_remaining = timers
+            .iter()
+            .map(|ti| ti.remaining_millis)
+            .max()
+            .expect("timers.len() != 0");
+        let max_remaining_len = Duration::from_millis(max_remaining)
+            .format_colon_separated()
+            .len();
+        max_remaining_len.max(remaining_header.len())
+    };
+
+    let gap = "  ";
+    let table_config = TableConfig {
+        status_column_width,
+        id_column_width,
+        remaining_column_width,
+        gap,
+    };
+
+    // Stylize doesn't seem to support formatting with padding,
+    // so we have to pre-pad
+    let id_header_padded = format!("{:<id_column_width$}", id_header);
+    let remaining_header_padded = format!("{:<remaining_column_width$}", remaining_header);
+
+    // Header
+    write!(
+        output,
+        "{status_header}{gap}{}{gap}{}\n",
+        id_header_padded.underlined(),
+        remaining_header_padded.underlined(),
+    )
+    .unwrap();
+
     if running.len() > 0 {
-        timers_table(&mut output, first_column_width, &running);
+        timers_table(&mut output, &table_config, running);
         if paused.len() > 0 {
             output.push_str("\n");
         }
     }
     if paused.len() > 0 {
-        timers_table(&mut output, first_column_width, &paused);
+        timers_table(&mut output, &table_config, paused);
     }
 
     output
@@ -40,18 +96,18 @@ pub fn ls(mut timers: Vec<TimerInfoForClient>) -> impl Display {
 /// Display a table of timer information. For use by `sand ls`
 ///
 /// Used separately for running and paused timers.
-fn timers_table(
-    output: &mut String,
-    first_column_width: usize,
-    timers: &[&TimerInfoForClient],
-) -> () {
-    for &timer in timers {
-        output.push_str(&timers_table_row(timer, first_column_width));
-        output.push('\n');
+fn timers_table<'a>(
+    output: &mut impl Write,
+    table_config: &TableConfig,
+    timers: impl IntoIterator<Item = &'a TimerInfoForClient>,
+) {
+    for timer in timers {
+        let row = timers_table_row(timer, table_config);
+        write!(output, "{row}\n").expect("Write failed");
     }
 }
 
-pub fn timers_table_row(timer_info: &TimerInfoForClient, first_column_width: usize) -> String {
+fn timers_table_row(timer_info: &TimerInfoForClient, table_config: &TableConfig) -> String {
     let remaining: String =
         Duration::from_millis(timer_info.remaining_millis).format_colon_separated();
     let id = timer_info.id;
@@ -59,11 +115,17 @@ pub fn timers_table_row(timer_info: &TimerInfoForClient, first_column_width: usi
         TimerState::Paused => " ⏸ ",
         TimerState::Running => " ▶ ",
     };
-    format!(
-        "{play_pause} │ {:>width$} │ {remaining}",
+    let &TableConfig {
+        status_column_width,
+        id_column_width,
+        remaining_column_width,
+        gap,
+    } = table_config;
+    let s = format!(
+        "{play_pause:>status_column_width$}{gap}{:>id_column_width$}{gap}{remaining:>remaining_column_width$}",
         id.to_string(),
-        width = first_column_width
-    )
+    );
+    s
 }
 
 pub fn next_due(timer: &TimerInfoForClient) -> impl Display {

@@ -9,6 +9,7 @@ strip = true
 [dependencies]
 clap = { version = "4.5.13", features = ["derive"] }
 colog = "1.4.0"
+crossterm = "0.29.0"
 dashmap = "6.0.1"
 derive_more = { version = "2", features = ["from", "from_str"] }
 dirs = "6.0"
@@ -19,6 +20,7 @@ notify-rust = "4.11.1"
 rodio = "0.21.1"
 serde = { version = "1.0.204", features = ["derive"] }
 serde_json = "1.0.122"
+termbg = "0.6.2"
 tokio = { version = "1.39.2", features = ["full"] }
 tokio-stream = { version = "0.1.15", features = ["full"] }
 zbus = "5.12.0"
