@@ -4,7 +4,9 @@ mod handle_client;
 
 use indoc::indoc;
 use notify_rust::Notification;
+use std::env::VarError;
 use std::io;
+use std::num::ParseIntError;
 use std::os::fd::FromRawFd;
 use std::os::fd::RawFd;
 use std::os::unix;
@@ -12,8 +14,8 @@ use std::os::unix::fs::FileTypeExt;
 use std::path::PathBuf;
 use std::sync::Arc;
 use tokio;
-use tokio::sync::mpsc;
 use tokio::sync::Notify;
+use tokio::sync::mpsc;
 
 use crate::cli;
 use crate::sand::socket::env_sock_path;
@@ -30,10 +32,29 @@ struct ElapsedEvent(TimerId);
 // Setup
 /////////////////////////////////////////////////////////////////////////////////////////
 
-fn env_fd() -> Option<u32> {
+#[derive(Debug)]
+enum GetSocketError {
+    VarError(VarError),
+    ParseIntError(ParseIntError),
+    PIDMismatch,
+}
+
+impl From<VarError> for GetSocketError {
+    fn from(err: VarError) -> Self {
+        GetSocketError::VarError(err)
+    }
+}
+
+impl From<ParseIntError> for GetSocketError {
+    fn from(err: ParseIntError) -> Self {
+        GetSocketError::ParseIntError(err)
+    }
+}
+
+fn env_fd() -> Option<RawFd> {
     let str_fd = std::env::var("SAND_SOCKFD").ok()?;
     let fd = str_fd
-        .parse::<u32>()
+        .parse::<RawFd>()
         .expect("Error: Found SAND_SOCKFD but couldn't parse it as a string")
         .into();
     Some(fd)
@@ -42,7 +63,9 @@ fn env_fd() -> Option<u32> {
 fn get_fd() -> RawFd {
     match env_fd() {
         None => {
-            log::debug!("SAND_SOCKFD not found, falling back the default systemd socket file descriptor (3).");
+            log::debug!(
+                "SAND_SOCKFD not found, falling back the default systemd socket file descriptor (3)."
+            );
             SYSTEMD_SOCKFD
         }
         Some(fd) => {
