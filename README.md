@@ -7,21 +7,29 @@ interacting with it.
 $ sand start 5m
 Timer #1 created for 00:05:00:000.
 
-$ sand start 1h 30s
-Timer #2 created for 01:00:30:000.
+$ sand s 1h 30m
+Timer #2 created for 01:30:00:000.
 
 $ sand ls
-#1 | 00:04:23:929
-#2 | 01:00:20:407
+     ID  Remaining
+ ▶   #1  00:04:44:580
+ ▶   #2  01:29:54:514
 
-$ sand cancel 1
+$ sand pause 1
+Paused timer #1.
+
+$ sand ls
+     ID  Remaining
+ ▶   #2  01:29:29:447
+
+ ⏸   #1  00:04:25:017
+
+$ sand cancel 1 2
 Cancelled timer #1.
-
-$ sand cancel 2
 Cancelled timer #2.
 
 $ sand ls
-No timers running.
+There are currently no timers.
 ```
 A sound will play and a desktop notification will be triggered when a timer 
 elapses.
