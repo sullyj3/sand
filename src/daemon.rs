@@ -32,6 +32,8 @@ struct ElapsedEvent(TimerId);
 // Setup
 /////////////////////////////////////////////////////////////////////////////////////////
 
+// TODO create module for getting socket: listen.rs or something
+
 #[derive(Debug)]
 enum GetSocketError {
     VarError(VarError),
@@ -105,6 +107,7 @@ fn get_fd() -> RawFd {
             );
             systemd_socket_activation_fd().unwrap_or_else(|err| {
                 // TODO write a Display impl for GetSocketError
+                // TODO move final error message and exit up into get_socket, make get_fd return a result
                 // log::error!("Failed to get systemd socket file descriptor: {}", err);
                 log::error!(indoc! {"
                     Since we didn't get SAND_SOCKFD, SAND_SOCK_PATH, or LISTEN_PID and LISTEN_FDS,
