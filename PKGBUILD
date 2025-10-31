@@ -35,7 +35,7 @@ package() {
     install -Dm644 LICENSE "${pkgdir}/usr/share/licenses/${_pkgname}/LICENSE"
 
     install -Dm644 resources/systemd/sand.socket "${pkgdir}/usr/lib/systemd/user/sand.socket"
-    install -Dm644 resources/systemd/sand.service "${pkgdir}/usr/lib/systemd/user/sand.service"
+    install -Dm644 <(sed 's|@prefix@|/usr|' resources/systemd/sand.service.in) "${pkgdir}/usr/lib/systemd/user/sand.service"
 
     install -Dm644 resources/timer_sound.flac "${pkgdir}/usr/share/${_pkgname}/timer_sound.flac"
 }
