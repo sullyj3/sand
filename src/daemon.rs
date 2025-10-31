@@ -74,35 +74,39 @@ fn get_fd() -> RawFd {
          })
 }
 
+fn maybe_delete_stale_socket(path: &PathBuf) {
+    if let Ok(meta) = std::fs::symlink_metadata(path) {
+        if meta.file_type().is_socket() {
+            // safe to remove stale socket
+            if let Err(e) = std::fs::remove_file(path) {
+                log::error!("Failed to remove existing socket {:?}: {}", path, e);
+            } else {
+                log::debug!("Removed stale socket at {:?}", path);
+            }
+        } else {
+            log::error!(
+                indoc! {"
+                    SAND_SOCK_PATH {:?} exists but is not a socket.
+                        (type: {:?})
+                    Refusing to overwrite — please remove or change SAND_SOCK_PATH."},
+                path,
+                meta.file_type()
+            );
+
+            std::process::exit(1);
+        }
+    }
+}
+
 /// Get a UnixListener for accepting client connections.
 ///
 /// Since this calls UnixListener::bind, it must be called from within a tokio
 /// runtime.
 fn get_socket() -> io::Result<tokio::net::UnixListener> {
     env_sock_path()
-        .inspect(|path: &PathBuf| {
+        .inspect(|path| {
             log::trace!("found path in SAND_SOCK_PATH: {:?}", path);
-            if let Ok(meta) = std::fs::symlink_metadata(path) {
-                if meta.file_type().is_socket() {
-                    // safe to remove stale socket
-                    if let Err(e) = std::fs::remove_file(path) {
-                        log::error!("Failed to remove existing socket {:?}: {}", path, e);
-                    } else {
-                        log::debug!("Removed stale socket at {:?}", path);
-                    }
-                } else {
-                    log::error!(
-                        indoc! {"
-                        SAND_SOCK_PATH {:?} exists but is not a socket.
-                            (type: {:?})
-                        Refusing to overwrite — please remove or change SAND_SOCK_PATH."},
-                        path,
-                        meta.file_type()
-                    );
-
-                    std::process::exit(1);
-                }
-            }
+            maybe_delete_stale_socket(path);
         })
         .map(tokio::net::UnixListener::bind)
         .unwrap_or_else(|| {
