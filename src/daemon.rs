@@ -75,26 +75,28 @@ fn get_fd() -> RawFd {
 }
 
 fn maybe_delete_stale_socket(path: &PathBuf) {
-    if let Ok(meta) = std::fs::symlink_metadata(path) {
-        if meta.file_type().is_socket() {
-            // safe to remove stale socket
-            if let Err(e) = std::fs::remove_file(path) {
-                log::error!("Failed to remove existing socket {:?}: {}", path, e);
-            } else {
-                log::debug!("Removed stale socket at {:?}", path);
-            }
-        } else {
-            log::error!(
-                indoc! {"
-                    SAND_SOCK_PATH {:?} exists but is not a socket.
-                        (type: {:?})
-                    Refusing to overwrite — please remove or change SAND_SOCK_PATH."},
-                path,
-                meta.file_type()
-            );
+    let Ok(meta) = std::fs::symlink_metadata(path) else {
+        return;
+    };
 
-            std::process::exit(1);
-        }
+    if !meta.file_type().is_socket() {
+        log::error!(
+            indoc! {"
+                SAND_SOCK_PATH {:?} exists but is not a socket.
+                    (type: {:?})
+                Refusing to overwrite — please remove or change SAND_SOCK_PATH."},
+            path,
+            meta.file_type()
+        );
+
+        std::process::exit(1);
+    }
+
+    // safe to remove stale socket
+    if let Err(e) = std::fs::remove_file(path) {
+        log::error!("Failed to remove existing socket {:?}: {}", path, e);
+    } else {
+        log::debug!("Removed stale socket at {:?}", path);
     }
 }
 
