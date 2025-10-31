@@ -54,6 +54,7 @@ impl From<ParseIntError> for GetSocketError {
     }
 }
 
+// TODO I don't think we actually need this env variable. mutually redundant with SAND_SOCK_PATH
 fn env_fd() -> Result<RawFd, GetSocketError> {
     let str_fd = std::env::var("SAND_SOCKFD")?;
     let fd = str_fd.parse::<RawFd>().inspect_err(|_err| {
@@ -102,7 +103,14 @@ fn get_fd() -> RawFd {
             log::debug!(
                 "SAND_SOCKFD not found, falling back the default systemd socket file descriptor (3)."
             );
-            systemd_socket_activation_fd().unwrap()
+            systemd_socket_activation_fd().unwrap_or_else(|err| {
+                // TODO write a Display impl for GetSocketError
+                // log::error!("Failed to get systemd socket file descriptor: {}", err);
+                log::error!(indoc! {"
+                    Since we didn't get SAND_SOCKFD, SAND_SOCK_PATH, or LISTEN_PID and LISTEN_FDS,
+                    I don't know what socket to listen on! Exiting..."});
+                std::process::exit(1);
+            })
          })
 }
 
