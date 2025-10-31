@@ -58,7 +58,7 @@ impl From<ParseIntError> for GetSocketError {
 fn env_fd() -> Result<RawFd, GetSocketError> {
     let str_fd = std::env::var("SAND_SOCKFD")?;
     let fd = str_fd.parse::<RawFd>().inspect_err(|_err| {
-        log::error!("Error: Found SAND_SOCKFD but couldn't parse it as a string")
+        log::error!("Error: Found SAND_SOCKFD but couldn't parse it as an int")
     })?;
     Ok(fd)
 }
