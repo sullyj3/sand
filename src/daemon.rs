@@ -35,6 +35,9 @@ struct ElapsedEvent(TimerId);
 #[derive(Debug)]
 enum GetSocketError {
     VarError(VarError),
+    /// Returned when the environment variables `LISTEN_FDS` and `LISTEN_PID`
+    /// are not set.
+    NotSystemd,
     ParseIntError(ParseIntError),
     PIDMismatch,
 }
@@ -60,6 +63,35 @@ fn env_fd() -> Result<RawFd, GetSocketError> {
 }
 
 fn systemd_socket_activation_fd() -> Result<RawFd, GetSocketError> {
+    let listen_pid = std::env::var("LISTEN_PID")
+        .map_err(|err| match err {
+            VarError::NotPresent => GetSocketError::NotSystemd,
+            _ => GetSocketError::VarError(err),
+        })?
+        .parse::<u32>()
+        .expect("Couldn't parse LISTEN_PID as u32");
+    let our_pid = std::process::id();
+
+    if listen_pid != our_pid {
+        log::trace!("LISTEN_PID does not match our PID");
+        return Err(GetSocketError::PIDMismatch);
+    }
+    log::trace!("LISTEN_PID matches our PID");
+
+    let listen_fds = std::env::var("LISTEN_FDS")
+        .map_err(|err| match err {
+            VarError::NotPresent => GetSocketError::NotSystemd,
+            _ => GetSocketError::VarError(err),
+        })?
+        .parse::<u32>()
+        .expect("Couldn't parse LISTEN_FDS as u32");
+
+    if listen_fds != 1 {
+        log::warn!(
+            "Expected LISTEN_FDS to be 1, but found {}. Continuing anyway",
+            listen_fds
+        );
+    }
     Ok(SYSTEMD_SOCKFD)
 }
 
