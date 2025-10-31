@@ -4,6 +4,7 @@ DESTDIR ?=
 PREFIX ?= /usr/local
 BINDIR = $(DESTDIR)$(PREFIX)/bin
 SYSTEMD_USER_DIR = $(DESTDIR)$(PREFIX)/lib/systemd/user
+BINARY ?= target/release/sand
 
 .PHONY: all
 all: sand
@@ -16,16 +17,17 @@ sand:
 sand-debug:
 	cargo build
 
-.PHONY: install-bin
-install-bin: sand
-	install -Dm755 target/release/sand $(BINDIR)/sand
+.PHONY: install
+install: sand
+	sudo $(MAKE) install-only
 
-.PHONY: install-debug-bin
-install-debug-bin: sand-debug
-	install -Dm755 target/debug/sand $(BINDIR)/sand
+.PHONY: install-debug
+install-debug: sand-debug
+	sudo $(MAKE) BINARY=target/debug/sand install-only
 
-.PHONY: install-rest
-install-rest:
+.PHONY: install-only
+install-only:
+	install -Dm755 $(BINARY) $(BINDIR)/sand
 	install -Dm644 README.md $(DESTDIR)$(PREFIX)/share/doc/$(PKG_NAME)/README.md
 	install -Dm644 LICENSE $(DESTDIR)$(PREFIX)/share/licenses/$(PKG_NAME)/LICENSE
 
@@ -35,12 +37,6 @@ install-rest:
 		$(SYSTEMD_USER_DIR)/sand.service
 
 	install -Dm644 resources/timer_sound.flac $(DESTDIR)$(PREFIX)/share/$(PKG_NAME)/timer_sound.flac
-
-.PHONY: install
-install: install-bin install-rest
-
-.PHONY: install-debug
-install-debug: install-debug-bin install-rest
 
 .PHONY: uninstall
 uninstall:

@@ -78,8 +78,7 @@ be able to use it on most distros. Please let me know if you do so I can update 
         - on Debian/Ubuntu: libasound2-dev
         - on Fedora: alsa-lib-devel
     - cargo, for building
-2. `make`
-3. `sudo make install`
+2. `make install`
 
 ## Setup
 After installing, you'll need to enable and start the service.
