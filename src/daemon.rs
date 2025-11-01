@@ -124,16 +124,17 @@ fn systemd_socket_activation_fd() -> Result<RawFd, GetSocketError> {
 }
 
 fn get_fd() -> Option<RawFd> {
-    env_fd().ok()
+    env_fd()
+        .ok()
         .inspect(|_| log::debug!("Found SAND_SOCKFD"))
         .or_else(|| {
-            log::debug!(
-                "SAND_SOCKFD not found, falling back the default systemd socket file descriptor (3)."
-            );
-            systemd_socket_activation_fd().inspect_err(|err|
-                log::error!("Failed to get systemd socket file descriptor: {}", err)
-            ).ok()
-         })
+            log::debug!("SAND_SOCKFD not found, checking for systemd socket activation.");
+            systemd_socket_activation_fd()
+                .inspect_err(|err| {
+                    log::debug!("Failed to get systemd socket file descriptor:\n    {}", err)
+                })
+                .ok()
+        })
 }
 
 fn maybe_delete_stale_socket(path: &PathBuf) {
@@ -180,24 +181,32 @@ fn maybe_delete_stale_socket(path: &PathBuf) {
 /// Since this calls UnixListener::bind, it must be called from within a tokio
 /// runtime.
 fn get_socket() -> io::Result<tokio::net::UnixListener> {
-    env_sock_path()
-        .inspect(|path| {
-            log::trace!("found path in SAND_SOCK_PATH: {:?}", path);
-            maybe_delete_stale_socket(path);
-        })
-        .map(tokio::net::UnixListener::bind)
-        .unwrap_or_else(|| {
-            let Some(fd) = get_fd() else {
-                log::error!(indoc! {"
-                    Since we didn't get SAND_SOCKFD, SAND_SOCK_PATH, or LISTEN_PID and LISTEN_FDS,
-                    I don't know what socket to listen on! Exiting..."});
-                std::process::exit(1);
-            };
-            let std_listener: unix::net::UnixListener =
-                unsafe { unix::net::UnixListener::from_raw_fd(fd) };
-            std_listener.set_nonblocking(true)?;
-            tokio::net::UnixListener::from_std(std_listener)
-        })
+    if let Some(path) = env_sock_path() {
+        log::trace!("found path in SAND_SOCK_PATH: {:?}", path);
+        maybe_delete_stale_socket(&path);
+        let listener = tokio::net::UnixListener::bind(path)?;
+        return Ok(listener);
+    }
+
+    if let Some(fd) = get_fd() {
+        let std_listener: unix::net::UnixListener =
+            unsafe { unix::net::UnixListener::from_raw_fd(fd) };
+        std_listener.set_nonblocking(true)?;
+        let listener = tokio::net::UnixListener::from_std(std_listener)?;
+        return Ok(listener);
+    }
+
+    log::error!(indoc! {"
+        I don't know what socket to listen on!
+        - We didn't get SAND_SOCKFD or SAND_SOCK_PATH
+        - Since we didn't get LISTEN_PID or LISTEN_FDS, we're not running in
+          systemd socket activation mode.
+
+        Please specify a socket with SAND_SOCK_PATH or SAND_SOCKFD, or run using
+        the provided systemd socket unit.
+
+        Exiting."});
+    std::process::exit(1);
 }
 
 /////////////////////////////////////////////////////////////////////////////////////////
