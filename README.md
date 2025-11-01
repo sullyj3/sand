@@ -67,8 +67,8 @@ You can install using the `PKGBUILD` for `sand-timer-git` in the root directory.
 
 ### Build and install from source
 
-Note that sand is untested on distros other than arch, but I believe you should
-be able to use it on most distros. Please let me know if you do so I can update this readme!
+Sand should work on most distros. It's been tested on Arch and Ubuntu.
+Please let me know if it works on your distro so that I can update this list!
 
 1. Make sure you have the dependencies:
     - systemd
