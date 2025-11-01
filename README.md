@@ -54,6 +54,7 @@ Basically, a bunch of minor useability improvements.
 - You get a convenient syntax for minutes and hours, so that you don't have to
   multiply by 60 or 3600 in your head to figure out how many seconds you need.
 - You get the ability to see how much time is remaining. Important feature IMO!
+- Sand handles suspend/sleep
 
 If you're an ultra-minimalist who prefers cobbling solutions together using
 tools that come stock with your distro, this might not be for you. If you like
