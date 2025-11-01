@@ -72,13 +72,13 @@ Sand should work on most distros. It's been tested on Arch and Ubuntu.
 Please let me know if it works on your distro so that I can update this list!
 
 1. Make sure you have the dependencies:
-    - systemd
-    - libnotify
-    - optionally, for [audio](https://github.com/RustAudio/rodio?tab=readme-ov-file#dependencies-linux-only):
+    - ALSA development libraries, for [audio](https://github.com/RustAudio/rodio?tab=readme-ov-file#dependencies-linux-only):
         - on Arch: alsa-lib
         - on Debian/Ubuntu: libasound2-dev
         - on Fedora: alsa-lib-devel
-    - cargo, for building
+    - cargo, for building. Obtain via [rustup](https://rustup.rs/) to ensure
+      that it uses the correct toolchain.
+    - systemd (technically optional, but use without it is not yet supported)
 2. `make`
 3. `sudo make install`
 
@@ -94,9 +94,12 @@ To see notifications, you'll need a libnotify compatible notification server.
 Desktop managers like Gnome and Plasma generally come with this built in, but
 if you use a stand alone window manager you'll need to choose and install one
 yourself. You can find a list of potential options [here](https://wiki.archlinux.org/title/Desktop_notifications#Standalone).
+I use swaync.
 
-You can type
+To check everything's working correctly, you can type:
+
 ```console
 $ sand start 0
 ```
-to check everything's working correctly.
+
+You should get a sound and a notification immediately.
