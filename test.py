@@ -47,6 +47,9 @@ def ensure_deleted(path):
         pass
 
 
+# TODO now that the daemon knowns how to create its own sockets, we can just
+# use SAND_SOCK_PATH, delete this fixture, and finally delete the SAND_SOCKFD
+# code from the daemon. It's a weird thing to have anyway
 @pytest.fixture
 def daemon_socket():
     ensure_deleted(SOCKET_PATH)

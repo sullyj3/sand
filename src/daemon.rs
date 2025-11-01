@@ -4,7 +4,10 @@ mod handle_client;
 
 use indoc::indoc;
 use notify_rust::Notification;
+use std::env::VarError;
+use std::fmt::Display;
 use std::io;
+use std::num::ParseIntError;
 use std::os::fd::FromRawFd;
 use std::os::fd::RawFd;
 use std::os::unix;
@@ -12,8 +15,8 @@ use std::os::unix::fs::FileTypeExt;
 use std::path::PathBuf;
 use std::sync::Arc;
 use tokio;
-use tokio::sync::mpsc;
 use tokio::sync::Notify;
+use tokio::sync::mpsc;
 
 use crate::cli;
 use crate::sand::socket::env_sock_path;
@@ -30,26 +33,146 @@ struct ElapsedEvent(TimerId);
 // Setup
 /////////////////////////////////////////////////////////////////////////////////////////
 
-fn env_fd() -> Option<u32> {
-    let str_fd = std::env::var("SAND_SOCKFD").ok()?;
-    let fd = str_fd
-        .parse::<u32>()
-        .expect("Error: Found SAND_SOCKFD but couldn't parse it as a string")
-        .into();
-    Some(fd)
+// TODO create module for getting socket: listen.rs or something
+
+#[derive(Debug)]
+enum GetSocketError {
+    VarError(VarError),
+    /// Returned when the environment variables `LISTEN_FDS` and `LISTEN_PID`
+    /// are not set.
+    NoListenPID,
+    NoListenFDs,
+    ParseIntError(ParseIntError),
+    PIDMismatch,
 }
 
-fn get_fd() -> RawFd {
-    match env_fd() {
-        None => {
-            log::debug!("SAND_SOCKFD not found, falling back the default systemd socket file descriptor (3).");
-            SYSTEMD_SOCKFD
+impl From<VarError> for GetSocketError {
+    fn from(err: VarError) -> Self {
+        GetSocketError::VarError(err)
+    }
+}
+
+impl From<ParseIntError> for GetSocketError {
+    fn from(err: ParseIntError) -> Self {
+        GetSocketError::ParseIntError(err)
+    }
+}
+
+impl Display for GetSocketError {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        match self {
+            GetSocketError::VarError(err) => {
+                write!(f, "Failed to get environment variable: {}", err)
+            }
+            GetSocketError::ParseIntError(err) => write!(f, "Failed to parse integer: {}", err),
+            GetSocketError::NoListenPID => write!(
+                f,
+                "The LISTEN_PID environment variable is not set, so we're not running in systemd socket activation mode."
+            ),
+            GetSocketError::NoListenFDs => write!(
+                f,
+                "The LISTEN_FDS environment variable is not set, so we're not running in systemd socket activation mode."
+            ),
+            GetSocketError::PIDMismatch => write!(
+                f,
+                "The LISTEN_PID environment variable does not match our PID"
+            ),
         }
-        Some(fd) => {
-            log::debug!("Found SAND_SOCKFD.");
-            fd.try_into()
-                .expect("Error: SAND_SOCKFD is too large to be a file descriptor.")
+    }
+}
+
+// TODO I don't think we actually need this env variable. mutually redundant with SAND_SOCK_PATH
+fn env_fd() -> Result<RawFd, GetSocketError> {
+    let str_fd = std::env::var("SAND_SOCKFD")?;
+    let fd = str_fd.parse::<RawFd>().inspect_err(|_err| {
+        log::error!("Error: Found SAND_SOCKFD but couldn't parse it as an int")
+    })?;
+    Ok(fd)
+}
+
+fn systemd_socket_activation_fd() -> Result<RawFd, GetSocketError> {
+    let listen_pid = std::env::var("LISTEN_PID")
+        .map_err(|err| match err {
+            VarError::NotPresent => GetSocketError::NoListenPID,
+            _ => GetSocketError::VarError(err),
+        })?
+        .parse::<u32>()
+        .expect("Couldn't parse LISTEN_PID as u32");
+    let our_pid = std::process::id();
+
+    if listen_pid != our_pid {
+        log::trace!("LISTEN_PID does not match our PID");
+        return Err(GetSocketError::PIDMismatch);
+    }
+    log::trace!("LISTEN_PID matches our PID");
+
+    let listen_fds = std::env::var("LISTEN_FDS")
+        .map_err(|err| match err {
+            VarError::NotPresent => GetSocketError::NoListenFDs,
+            _ => GetSocketError::VarError(err),
+        })?
+        .parse::<u32>()
+        .expect("Couldn't parse LISTEN_FDS as u32");
+
+    if listen_fds != 1 {
+        log::warn!(
+            "Expected LISTEN_FDS to be 1, but found {}. Continuing anyway",
+            listen_fds
+        );
+    }
+    Ok(SYSTEMD_SOCKFD)
+}
+
+fn get_fd() -> Option<RawFd> {
+    env_fd()
+        .ok()
+        .inspect(|_| log::debug!("Found SAND_SOCKFD"))
+        .or_else(|| {
+            log::debug!("SAND_SOCKFD not found, checking for systemd socket activation.");
+            systemd_socket_activation_fd()
+                .inspect_err(|err| {
+                    log::debug!("Failed to get systemd socket file descriptor:\n    {}", err)
+                })
+                .ok()
+        })
+}
+
+fn maybe_delete_stale_socket(path: &PathBuf) {
+    let meta = match std::fs::symlink_metadata(path) {
+        Ok(meta) => meta,
+        Err(e) => {
+            match e.kind() {
+                io::ErrorKind::NotFound => {}
+                _ => log::error!(
+                    indoc! {"
+                        While trying to delete potential stale sockets:
+                        Failed to get metadata at socket path {:?}: {}"},
+                    path,
+                    e
+                ),
+            }
+            return;
         }
+    };
+
+    if !meta.file_type().is_socket() {
+        log::error!(
+            indoc! {"
+                SAND_SOCK_PATH {:?} exists but is not a socket.
+                    (type: {:?})
+                Refusing to overwrite — please remove or change SAND_SOCK_PATH."},
+            path,
+            meta.file_type()
+        );
+
+        std::process::exit(1);
+    }
+
+    // safe to remove stale socket
+    if let Err(e) = std::fs::remove_file(path) {
+        log::error!("Failed to remove existing socket {:?}: {}", path, e);
+    } else {
+        log::debug!("Removed stale socket at {:?}", path);
     }
 }
 
@@ -58,39 +181,32 @@ fn get_fd() -> RawFd {
 /// Since this calls UnixListener::bind, it must be called from within a tokio
 /// runtime.
 fn get_socket() -> io::Result<tokio::net::UnixListener> {
-    env_sock_path()
-        .inspect(|path: &PathBuf| {
-            log::trace!("found path in SAND_SOCK_PATH: {:?}", path);
-            if let Ok(meta) = std::fs::symlink_metadata(path) {
-                if meta.file_type().is_socket() {
-                    // safe to remove stale socket
-                    if let Err(e) = std::fs::remove_file(path) {
-                        log::error!("Failed to remove existing socket {:?}: {}", path, e);
-                    } else {
-                        log::debug!("Removed stale socket at {:?}", path);
-                    }
-                } else {
-                    log::error!(
-                        indoc! {"
-                        SAND_SOCK_PATH {:?} exists but is not a socket.
-                            (type: {:?})
-                        Refusing to overwrite — please remove or change SAND_SOCK_PATH."},
-                        path,
-                        meta.file_type()
-                    );
+    if let Some(path) = env_sock_path() {
+        log::trace!("found path in SAND_SOCK_PATH: {:?}", path);
+        maybe_delete_stale_socket(&path);
+        let listener = tokio::net::UnixListener::bind(path)?;
+        return Ok(listener);
+    }
 
-                    std::process::exit(1);
-                }
-            }
-        })
-        .map(tokio::net::UnixListener::bind)
-        .unwrap_or_else(|| {
-            let fd = get_fd();
-            let std_listener: unix::net::UnixListener =
-                unsafe { unix::net::UnixListener::from_raw_fd(fd) };
-            std_listener.set_nonblocking(true)?;
-            tokio::net::UnixListener::from_std(std_listener)
-        })
+    if let Some(fd) = get_fd() {
+        let std_listener: unix::net::UnixListener =
+            unsafe { unix::net::UnixListener::from_raw_fd(fd) };
+        std_listener.set_nonblocking(true)?;
+        let listener = tokio::net::UnixListener::from_std(std_listener)?;
+        return Ok(listener);
+    }
+
+    log::error!(indoc! {"
+        I don't know what socket to listen on!
+        - We didn't get SAND_SOCKFD or SAND_SOCK_PATH
+        - Since we didn't get LISTEN_PID or LISTEN_FDS, we're not running in
+          systemd socket activation mode.
+
+        Please specify a socket with SAND_SOCK_PATH or SAND_SOCKFD, or run using
+        the provided systemd socket unit.
+
+        Exiting."});
+    std::process::exit(1);
 }
 
 /////////////////////////////////////////////////////////////////////////////////////////
