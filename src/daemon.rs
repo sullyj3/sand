@@ -37,7 +37,8 @@ enum GetSocketError {
     VarError(VarError),
     /// Returned when the environment variables `LISTEN_FDS` and `LISTEN_PID`
     /// are not set.
-    NotSystemd,
+    NoListenPID,
+    NoListenFDs,
     ParseIntError(ParseIntError),
     PIDMismatch,
 }
@@ -66,7 +67,7 @@ fn env_fd() -> Result<RawFd, GetSocketError> {
 fn systemd_socket_activation_fd() -> Result<RawFd, GetSocketError> {
     let listen_pid = std::env::var("LISTEN_PID")
         .map_err(|err| match err {
-            VarError::NotPresent => GetSocketError::NotSystemd,
+            VarError::NotPresent => GetSocketError::NoListenPID,
             _ => GetSocketError::VarError(err),
         })?
         .parse::<u32>()
@@ -81,7 +82,7 @@ fn systemd_socket_activation_fd() -> Result<RawFd, GetSocketError> {
 
     let listen_fds = std::env::var("LISTEN_FDS")
         .map_err(|err| match err {
-            VarError::NotPresent => GetSocketError::NotSystemd,
+            VarError::NotPresent => GetSocketError::NoListenFDs,
             _ => GetSocketError::VarError(err),
         })?
         .parse::<u32>()
