@@ -5,6 +5,7 @@ mod handle_client;
 use indoc::indoc;
 use notify_rust::Notification;
 use std::env::VarError;
+use std::fmt::Display;
 use std::io;
 use std::num::ParseIntError;
 use std::os::fd::FromRawFd;
@@ -52,6 +53,29 @@ impl From<VarError> for GetSocketError {
 impl From<ParseIntError> for GetSocketError {
     fn from(err: ParseIntError) -> Self {
         GetSocketError::ParseIntError(err)
+    }
+}
+
+impl Display for GetSocketError {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        match self {
+            GetSocketError::VarError(err) => {
+                write!(f, "Failed to get environment variable: {}", err)
+            }
+            GetSocketError::ParseIntError(err) => write!(f, "Failed to parse integer: {}", err),
+            GetSocketError::NoListenPID => write!(
+                f,
+                "The LISTEN_PID environment variable is not set, so we're not running in systemd socket activation mode."
+            ),
+            GetSocketError::NoListenFDs => write!(
+                f,
+                "The LISTEN_FDS environment variable is not set, so we're not running in systemd socket activation mode."
+            ),
+            GetSocketError::PIDMismatch => write!(
+                f,
+                "The LISTEN_PID environment variable does not match our PID"
+            ),
+        }
     }
 }
 
@@ -105,8 +129,7 @@ fn get_fd() -> RawFd {
                 "SAND_SOCKFD not found, falling back the default systemd socket file descriptor (3)."
             );
             systemd_socket_activation_fd().unwrap_or_else(|err| {
-                // TODO write a Display impl for GetSocketError
-                // log::error!("Failed to get systemd socket file descriptor: {}", err);
+                log::error!("Failed to get systemd socket file descriptor: {}", err);
                 log::error!(indoc! {"
                     Since we didn't get SAND_SOCKFD, SAND_SOCK_PATH, or LISTEN_PID and LISTEN_FDS,
                     I don't know what socket to listen on! Exiting..."});
