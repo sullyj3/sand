@@ -123,22 +123,16 @@ fn systemd_socket_activation_fd() -> Result<RawFd, GetSocketError> {
     Ok(SYSTEMD_SOCKFD)
 }
 
-fn get_fd() -> RawFd {
+fn get_fd() -> Option<RawFd> {
     env_fd().ok()
         .inspect(|_| log::debug!("Found SAND_SOCKFD"))
-        .unwrap_or_else(|| {
+        .or_else(|| {
             log::debug!(
                 "SAND_SOCKFD not found, falling back the default systemd socket file descriptor (3)."
             );
-            systemd_socket_activation_fd().unwrap_or_else(|err| {
-                log::error!("Failed to get systemd socket file descriptor: {}", err);
-                // TODO move final error message and exit up into get_socket, make get_fd return a result
-                log::error!("Failed to get systemd socket file descriptor: {}", err);
-                log::error!(indoc! {"
-                    Since we didn't get SAND_SOCKFD, SAND_SOCK_PATH, or LISTEN_PID and LISTEN_FDS,
-                    I don't know what socket to listen on! Exiting..."});
-                std::process::exit(1);
-            })
+            systemd_socket_activation_fd().inspect_err(|err|
+                log::error!("Failed to get systemd socket file descriptor: {}", err)
+            ).ok()
          })
 }
 
@@ -193,7 +187,12 @@ fn get_socket() -> io::Result<tokio::net::UnixListener> {
         })
         .map(tokio::net::UnixListener::bind)
         .unwrap_or_else(|| {
-            let fd = get_fd();
+            let Some(fd) = get_fd() else {
+                log::error!(indoc! {"
+                    Since we didn't get SAND_SOCKFD, SAND_SOCK_PATH, or LISTEN_PID and LISTEN_FDS,
+                    I don't know what socket to listen on! Exiting..."});
+                std::process::exit(1);
+            };
             let std_listener: unix::net::UnixListener =
                 unsafe { unix::net::UnixListener::from_raw_fd(fd) };
             std_listener.set_nonblocking(true)?;
