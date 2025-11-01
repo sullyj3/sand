@@ -17,16 +17,17 @@ sand:
 sand-debug:
 	cargo build
 
+
 .PHONY: install
-install: sand
-	sudo $(MAKE) DESTDIR="$(DESTDIR)" PREFIX="$(PREFIX)" install-only
+install:
+	@echo "NOTE: we don't depend on the sand or sand-debug targets for install."
+	@echo "Therefore, remember to run make first, to make sure you're installing"
+	@echo "the correct binary."
+	@echo
+	@echo "The reason is to avoid accidentally building as root, causing permission"
+	@echo "issues and causing cargo to subsequently rebuild unnecessarily"
+	@echo
 
-.PHONY: install-debug
-install-debug: sand-debug
-	sudo $(MAKE) DESTDIR="$(DESTDIR)" PREFIX="$(PREFIX)" BINARY=target/debug/sand install-only
-
-.PHONY: install-only
-install-only:
 	install -Dm755 "$(BINARY)" "$(BINDIR)/sand"
 	install -Dm644 README.md "$(DESTDIR)$(PREFIX)/share/doc/$(PKG_NAME)/README.md"
 	install -Dm644 LICENSE "$(DESTDIR)$(PREFIX)/share/licenses/$(PKG_NAME)/LICENSE"
@@ -37,6 +38,10 @@ install-only:
 		"$(SYSTEMD_USER_DIR)/sand.service"
 
 	install -Dm644 resources/timer_sound.flac "$(DESTDIR)$(PREFIX)/share/$(PKG_NAME)/timer_sound.flac"
+
+.PHONY: install-debug
+install-debug:
+	$(MAKE) DESTDIR="$(DESTDIR)" PREFIX="$(PREFIX)" BINARY=target/debug/sand install
 
 .PHONY: uninstall
 uninstall:
