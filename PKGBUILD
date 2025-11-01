@@ -2,7 +2,7 @@
 # Contributor: James Sully <sullyj3@gmail.com>
 _pkgname=sand-timer
 pkgname=${_pkgname}-git
-pkgver=v0.6.0
+pkgver=v0.6.0.r4.c4c5052
 pkgrel=1
 pkgdesc="Command line countdown timers that don't take up a terminal."
 arch=('x86_64')
@@ -10,7 +10,7 @@ url="https://github.com/sullyj3/sand"
 license=('MIT')
 groups=()
 depends=('systemd' 'libnotify')
-makedepends=('git' 'rust' 'cargo')
+makedepends=('git' 'cargo-nightly' 'alsa-lib')
 provides=("${_pkgname}")
 conflicts=("${_pkgname}")
 source=("${_pkgname}::git+https://github.com/sullyj3/sand.git")
