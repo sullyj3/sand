@@ -120,7 +120,7 @@ class TestClient:
     def test_add(self, daemon):
         (status, output) = run_client(SOCKET_PATH, ["start", "10m"])
         assert status == 0, f"Client exited with status {status}"
-        expected_stdout = "Timer #1 created for 00:10:00:000."
+        expected_stdout = "Timer #1 created for 00:10:00.000."
         assert output.strip() == expected_stdout
 
 

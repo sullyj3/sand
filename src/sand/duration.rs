@@ -14,7 +14,7 @@ impl DurationExt for Duration {
         let seconds = total_seconds % 60;
         let millis = self.subsec_millis();
 
-        format!("{:02}:{:02}:{:02}:{:03}", hours, minutes, seconds, millis)
+        format!("{:02}:{:02}:{:02}.{:03}", hours, minutes, seconds, millis)
     }
 }
 
