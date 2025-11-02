@@ -1,3 +1,4 @@
+use std::ffi::OsStr;
 use std::fmt::Debug;
 use std::fmt::{self, Display, Formatter};
 use std::fs::File;
@@ -5,8 +6,13 @@ use std::io::{self, BufReader, ErrorKind};
 use std::path::{Path, PathBuf};
 use std::sync::Arc;
 
+use indoc::indoc;
+use notify::{RecursiveMode, Watcher as _};
 use rodio::source::Buffered;
 use rodio::{Decoder, OutputStream, Source};
+use tokio::sync::RwLock;
+use tokio_stream::StreamExt as _;
+use tokio_stream::wrappers::ReceiverStream;
 
 use crate::sand::PKGNAME;
 
@@ -76,6 +82,8 @@ fn user_sound_path() -> SoundLoadResult<PathBuf> {
     Ok(path)
 }
 
+const SUPPORTED_EXTENSIONS: &[&str] = &["mp3", "wav", "flac", "aac", "m4a", "ogg"];
+
 fn load_user_sound() -> SoundLoadResult<Sound> {
     let path_no_extension = user_sound_path()?;
     log::debug!(
@@ -83,7 +91,6 @@ fn load_user_sound() -> SoundLoadResult<Sound> {
         path_no_extension.display()
     );
     // TODO .ogg doesn't seem to be working
-    const SUPPORTED_EXTENSIONS: &[&str] = &["mp3", "wav", "flac", "aac", "m4a", "ogg"];
     SUPPORTED_EXTENSIONS
         .iter()
         .find_map(|extension| {
@@ -172,7 +179,7 @@ impl Display for ElapsedSoundPlayerError {
 
 #[derive(Clone)]
 pub struct ElapsedSoundPlayer {
-    sound: Sound,
+    sound: Arc<RwLock<Sound>>,
     output_stream: Arc<OutputStream>,
 }
 
@@ -181,13 +188,90 @@ impl ElapsedSoundPlayer {
         let stream = rodio::OutputStreamBuilder::open_default_stream()
             .inspect_err(|e| log::debug!("{e}"))?;
         let sound = load_elapsed_sound().inspect_err(|e| log::warn!("{e}"))?;
-        Ok(Self {
-            sound,
+
+        let player = Self {
+            sound: Arc::new(RwLock::new(sound)),
             output_stream: Arc::new(stream),
-        })
+        };
+
+        tokio::spawn({
+            let player = player.clone();
+            async move {
+                player.refresh_when_changed().await;
+            }
+        });
+
+        Ok(player)
     }
 
-    pub fn play(&self) {
-        self.output_stream.mixer().add(self.sound.clone());
+    pub async fn refresh_sound(&self) -> Result<(), ElapsedSoundPlayerError> {
+        log::info!("Refreshing sound.");
+        let new_sound = load_elapsed_sound()?;
+        *self.sound.write().await = new_sound;
+        Ok(())
+    }
+
+    pub async fn refresh_when_changed(&self) {
+        let data_dir: PathBuf = match sand_user_data_dir() {
+            Ok(p) => p,
+            Err(err) => {
+                log::error!(
+                    indoc! {"
+                    Error obtaining path to user data directory: {}.
+                    Unable to start timer sound file watcher"},
+                    err
+                );
+                return;
+            }
+        };
+
+        let (tx_file_events, rx_file_events) = tokio::sync::mpsc::channel(10);
+
+        let handle_fs_event = move |ev| match ev {
+            Ok(ev) => {
+                log::trace!("File change event: {ev:?}");
+                tx_file_events
+                    .blocking_send(ev)
+                    .expect("failed to send file event {ev:?}");
+            }
+            Err(err) => {
+                log::warn!("Error from sound file watcher: {err}");
+            }
+        };
+        let mut watcher = match notify::recommended_watcher(handle_fs_event) {
+            Ok(w) => w,
+            Err(err) => {
+                log::error!("Error creating audio file watcher: {err}");
+                return;
+            }
+        };
+        if let Err(err) = watcher.watch(&data_dir, RecursiveMode::Recursive) {
+            log::error!("Error starting audio file watcher: {err}");
+            return;
+        }
+
+        let mut stream = ReceiverStream::new(rx_file_events).filter(|event| {
+            (event.kind.is_create() || event.kind.is_modify())
+                && event.paths.iter().any(|p| {
+                    let name_match = p.file_stem() == Some(OsStr::new("timer_sound"));
+                    let extension_match = p.extension().is_some_and(|ext| {
+                        SUPPORTED_EXTENSIONS.iter().any(|&sup_ext| sup_ext == ext)
+                    });
+                    name_match && extension_match
+                })
+        });
+
+        log::debug!("User sound file watcher started.");
+        while let Some(_event) = stream.next().await {
+            if let Err(e) = self.refresh_sound().await {
+                log::warn!("{e}");
+            }
+        }
+        log::error!("Bug: sound file events channel closed");
+    }
+
+    pub async fn play(&self) {
+        let s = self.sound.read().await.clone();
+        self.output_stream.mixer().add(s);
     }
 }

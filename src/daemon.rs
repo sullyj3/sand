@@ -265,9 +265,7 @@ async fn notifier_thread(mut elapsed_events: mpsc::Receiver<ElapsedEvent>) -> ! 
 
     while let Some(ElapsedEvent(timer_id)) = elapsed_events.recv().await {
         let player = player.clone();
-        tokio::spawn(async move {
-            do_notification(player, timer_id);
-        });
+        tokio::spawn(do_notification(player, timer_id));
     }
     unreachable!("bug: elapsed_events channel was closed.")
 }
@@ -294,7 +292,7 @@ async fn client_accept_loop(listener: tokio::net::UnixListener, ctx: DaemonCtx) 
 // Helpers
 /////////////////////////////////////////////////////////////////////////////////////////
 
-pub fn do_notification(player: Option<ElapsedSoundPlayer>, timer_id: TimerId) {
+pub async fn do_notification(player: Option<ElapsedSoundPlayer>, timer_id: TimerId) {
     let notification = Notification::new()
         .summary("Time's up!")
         .body(&format!("Timer {timer_id} has elapsed"))
@@ -307,7 +305,7 @@ pub fn do_notification(player: Option<ElapsedSoundPlayer>, timer_id: TimerId) {
 
     if let Some(ref player) = player {
         log::debug!("playing sound");
-        player.play();
+        player.play().await;
     } else {
         log::debug!("player is None - not playing sound");
     }
