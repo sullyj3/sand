@@ -4,7 +4,7 @@ on:
   push:
     branches: [main]
   pull_request:
-    types: [opened, ready_for_review, review_requested]
+    types: [opened, ready_for_review, review_requested, synchronize]
     branches: [main]
   workflow_dispatch:
 
