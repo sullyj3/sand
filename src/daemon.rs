@@ -140,17 +140,15 @@ fn get_fd() -> Option<RawFd> {
 fn maybe_delete_stale_socket(path: &PathBuf) {
     let meta = match std::fs::symlink_metadata(path) {
         Ok(meta) => meta,
+        Err(e) if e.kind() == io::ErrorKind::NotFound => return,
         Err(e) => {
-            match e.kind() {
-                io::ErrorKind::NotFound => {}
-                _ => log::error!(
-                    indoc! {"
-                        While trying to delete potential stale sockets:
-                        Failed to get metadata at socket path {:?}: {}"},
-                    path,
-                    e
-                ),
-            }
+            log::error!(
+                indoc! {"
+                    While trying to delete potential stale sockets:
+                    Failed to get metadata at socket path {:?}: {}"},
+                path,
+                e
+            );
             return;
         }
     };
