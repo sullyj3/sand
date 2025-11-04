@@ -105,11 +105,13 @@ def run_client(sock_path, args):
         stdout=subprocess.PIPE,
         stderr=subprocess.PIPE,
     )
-    return {
-        "status": client_proc.wait(),
-        "stdout": client_proc.stdout.read().decode("utf-8"),
-        "stderr": client_proc.stderr.read().decode("utf-8"),
-    }
+    status = client_proc.wait()
+    stdout = client_proc.stdout.read().decode("utf-8")
+    stderr = client_proc.stderr.read().decode("utf-8")
+    if status != 0:
+        log(f"Client exited with status {status}")
+        log(f"Client stderr:\n{stderr}")
+    return {"status": status, "stdout": stdout, "stderr": stderr}
 
 
 class TestClient:
