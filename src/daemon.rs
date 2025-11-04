@@ -82,15 +82,6 @@ impl Display for GetSocketError {
     }
 }
 
-// TODO I don't think we actually need this env variable. mutually redundant with SAND_SOCK_PATH
-fn env_fd() -> Result<RawFd, GetSocketError> {
-    let str_fd = std::env::var("SAND_SOCKFD")?;
-    let fd = str_fd.parse::<RawFd>().inspect_err(|_err| {
-        log::error!("Error: Found SAND_SOCKFD but couldn't parse it as an int")
-    })?;
-    Ok(fd)
-}
-
 fn systemd_socket_activation_fd() -> Result<RawFd, GetSocketError> {
     let listen_pid = std::env::var("LISTEN_PID")
         .map_err(|err| match err {
@@ -125,17 +116,11 @@ fn systemd_socket_activation_fd() -> Result<RawFd, GetSocketError> {
 }
 
 fn get_fd() -> Option<RawFd> {
-    env_fd()
-        .ok()
-        .inspect(|_| log::debug!("Found SAND_SOCKFD"))
-        .or_else(|| {
-            log::debug!("SAND_SOCKFD not found, checking for systemd socket activation.");
-            systemd_socket_activation_fd()
-                .inspect_err(|err| {
-                    log::debug!("Failed to get systemd socket file descriptor:\n    {}", err)
-                })
-                .ok()
+    systemd_socket_activation_fd()
+        .inspect_err(|err| {
+            log::debug!("Failed to get systemd socket file descriptor:\n    {}", err)
         })
+        .ok()
 }
 
 fn maybe_delete_stale_socket(path: &PathBuf) {
@@ -197,12 +182,12 @@ fn get_socket() -> io::Result<tokio::net::UnixListener> {
 
     log::error!(indoc! {"
         I don't know what socket to listen on!
-        - We didn't get SAND_SOCKFD or SAND_SOCK_PATH
+        - We didn't get SAND_SOCK_PATH
         - Since we didn't get LISTEN_PID or LISTEN_FDS, we're not running in
           systemd socket activation mode.
 
-        Please specify a socket with SAND_SOCK_PATH or SAND_SOCKFD, or run using
-        the provided systemd socket unit.
+        Please specify a socket with SAND_SOCK_PATH, or run using the provided
+        systemd socket unit.
 
         Exiting."});
     std::process::exit(1);
