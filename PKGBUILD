@@ -2,7 +2,7 @@
 # Contributor: James Sully <sullyj3@gmail.com>
 _pkgname=sand-timer
 pkgname=${_pkgname}-git
-pkgver=v0.6.0.r6.6a532c0
+pkgver=v0.7.0
 pkgrel=1
 pkgdesc="Command line countdown timers that don't take up a terminal."
 arch=('x86_64')
