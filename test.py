@@ -161,7 +161,7 @@ class TestDaemon:
         assert not diff, f"Response shape mismatch:\n{pformat(diff)}"
 
     def test_add(self, daemon):
-        msg = {"addtimer": {"duration": 60000}}
+        msg = {"starttimer": {"duration": 60000}}
         expected = {"ok": {"id": 1}}
 
         response = msg_and_response(msg)
@@ -169,8 +169,8 @@ class TestDaemon:
         assert not diff, f"Response shape mismatch:\n{pformat(diff)}"
 
     def test_list(self, daemon):
-        msg_and_response({"addtimer": {"duration": 10 * 60 * 1000}})
-        msg_and_response({"addtimer": {"duration": 20 * 60 * 1000}})
+        msg_and_response({"starttimer": {"duration": 10 * 60 * 1000}})
+        msg_and_response({"starttimer": {"duration": 20 * 60 * 1000}})
 
         response = msg_and_response("list")
 

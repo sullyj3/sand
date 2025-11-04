@@ -112,7 +112,7 @@ pub fn main(cli_cmd: cli::ClientCommand) -> io::Result<()> {
 
 fn start(conn: &mut DaemonConnection, durations: Vec<Duration>) -> ClientResult<()> {
     let dur: Duration = durations.iter().sum();
-    let AddTimerResponse::Ok { id } = conn.add_timer(dur)?;
+    let StartTimerResponse::Ok { id } = conn.add_timer(dur)?;
 
     let dur_string = dur.format_colon_separated();
     println!("Timer {id} created for {dur_string}.");

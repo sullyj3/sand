@@ -1,7 +1,7 @@
 use std::time::Duration;
 use std::time::Instant;
 
-use crate::sand::message::AddTimerResponse;
+use crate::sand::message::StartTimerResponse;
 use crate::sand::message::CancelTimerResponse;
 use crate::sand::message::ListResponse;
 use crate::sand::message::PauseTimerResponse;
@@ -33,10 +33,10 @@ impl CmdHandlerCtx {
         ListResponse::ok(self.state.get_timerinfo_for_client(self.now))
     }
 
-    fn add_timer(&self, duration: u64) -> AddTimerResponse {
+    fn start_timer(&self, duration: u64) -> StartTimerResponse {
         let duration = Duration::from_millis(duration);
-        let id = self.state.add_timer(self.now, duration);
-        AddTimerResponse::ok(id)
+        let id = self.state.start_timer(self.now, duration);
+        StartTimerResponse::ok(id)
     }
 
     fn pause_timer(&self, id: TimerId) -> PauseTimerResponse {
@@ -56,7 +56,7 @@ fn handle_command(cmd: Command, state: &DaemonCtx) -> Response {
     let ctx = CmdHandlerCtx::new(state.clone());
     match cmd {
         Command::List => ctx.list().into(),
-        Command::AddTimer { duration } => ctx.add_timer(duration).into(),
+        Command::StartTimer { duration } => ctx.start_timer(duration).into(),
         Command::PauseTimer(id) => ctx.pause_timer(id).into(),
         Command::ResumeTimer(id) => ctx.resume_timer(id).into(),
         Command::CancelTimer(id) => ctx.cancel_timer(id).into(),

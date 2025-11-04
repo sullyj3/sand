@@ -171,7 +171,7 @@ impl DaemonCtx {
         }
     }
 
-    pub fn add_timer(&self, now: Instant, duration: Duration) -> TimerId {
+    pub fn start_timer(&self, now: Instant, duration: Duration) -> TimerId {
         let vacant = self.timers.first_vacant_entry();
         let id = *vacant.key();
 

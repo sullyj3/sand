@@ -7,7 +7,7 @@ use crate::sand::timer::*;
 #[serde(rename_all = "lowercase")]
 pub enum Command {
     List,
-    AddTimer { duration: u64 },
+    StartTimer { duration: u64 },
     PauseTimer(TimerId),
     ResumeTimer(TimerId),
     CancelTimer(TimerId),
@@ -26,11 +26,11 @@ impl ListResponse {
 
 #[derive(Debug, PartialEq, Serialize, Deserialize)]
 #[serde(rename_all = "lowercase")]
-pub enum AddTimerResponse {
+pub enum StartTimerResponse {
     Ok { id: TimerId },
 }
-impl AddTimerResponse {
-    pub fn ok(id: TimerId) -> AddTimerResponse {
+impl StartTimerResponse {
+    pub fn ok(id: TimerId) -> StartTimerResponse {
         Self::Ok { id }
     }
 }
@@ -62,7 +62,7 @@ pub enum ResumeTimerResponse {
 #[serde(untagged)]
 pub enum Response {
     List(ListResponse),
-    AddTimer(AddTimerResponse),
+    AddTimer(StartTimerResponse),
     CancelTimer(CancelTimerResponse),
     PauseTimer(PauseTimerResponse),
     ResumeTimer(ResumeTimerResponse),

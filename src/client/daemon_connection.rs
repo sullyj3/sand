@@ -21,11 +21,11 @@ impl DaemonConnection {
         Ok(Self { read, write })
     }
 
-    pub fn add_timer(&mut self, duration: Duration) -> io::Result<AddTimerResponse> {
-        self.send(Command::AddTimer {
+    pub fn add_timer(&mut self, duration: Duration) -> io::Result<StartTimerResponse> {
+        self.send(Command::StartTimer {
             duration: duration.as_millis() as u64,
         })?;
-        self.recv::<AddTimerResponse>()
+        self.recv::<StartTimerResponse>()
     }
 
     pub fn list(&mut self) -> io::Result<ListResponse> {
