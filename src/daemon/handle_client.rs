@@ -14,19 +14,19 @@ use tokio_stream::wrappers::LinesStream;
 
 use super::ctx::DaemonCtx;
 
-async fn handle_command(cmd: Command, state: &DaemonCtx) -> Response {
+async fn handle_command(cmd: Command, ctx: &DaemonCtx) -> Response {
     let now = Instant::now();
     match cmd {
-        Command::List => ListResponse::ok(state.get_timerinfo_for_client(now)).into(),
+        Command::List => ListResponse::ok(ctx.get_timerinfo_for_client(now)).into(),
         Command::StartTimer { duration } => {
             let duration = Duration::from_millis(duration);
-            let id = state.start_timer(now, duration).await;
+            let id = ctx.start_timer(now, duration).await;
             StartTimerResponse::ok(id).into()
         }
-        Command::PauseTimer(id) => state.pause_timer(id, now).into(),
-        Command::ResumeTimer(id) => state.resume_timer(id, now).into(),
-        Command::CancelTimer(id) => state.cancel_timer(id, now).into(),
-        Command::Again => state.again(now).await.into(),
+        Command::PauseTimer(id) => ctx.pause_timer(id, now).into(),
+        Command::ResumeTimer(id) => ctx.resume_timer(id, now).into(),
+        Command::CancelTimer(id) => ctx.cancel_timer(id, now).into(),
+        Command::Again => ctx.again(now).await.into(),
     }
 }
 
