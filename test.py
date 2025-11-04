@@ -7,7 +7,6 @@ Sand integration tests.
 import time
 import socket
 import os
-import fcntl
 import subprocess
 import json
 import warnings
@@ -34,39 +33,14 @@ def log(s):
     print(f"Tests [{t}] {s}")
 
 
-"""
-Remove the socket file if it already exists
-"""
-
-
 def ensure_deleted(path):
+    """
+    Remove the socket file if it already exists
+    """
     try:
         os.unlink(path)
     except FileNotFoundError:
         pass
-
-
-# TODO now that the daemon knowns how to create its own sockets, we can just
-# use SAND_SOCK_PATH, delete this fixture, and finally delete the SAND_SOCKFD
-# code from the daemon. It's a weird thing to have anyway
-@pytest.fixture
-def daemon_socket():
-    ensure_deleted(SOCKET_PATH)
-
-    try:
-        with socket.socket(socket.AF_UNIX, socket.SOCK_STREAM) as sock:
-            sock.bind(SOCKET_PATH)
-            sock.listen(1)
-
-            flags = fcntl.fcntl(sock.fileno(), fcntl.F_GETFD)
-            flags |= fcntl.FD_CLOEXEC
-            fcntl.fcntl(sock.fileno(), fcntl.F_SETFD, flags)
-
-            log(f"Socket created at {SOCKET_PATH} on fd {sock.fileno()}")
-            yield sock
-    finally:
-        log(f"Removing socket file {SOCKET_PATH}")
-        ensure_deleted(SOCKET_PATH)
 
 
 # TODO refactor daemon tests to use fake client, client tests to use fake daemon
@@ -74,21 +48,21 @@ def daemon_socket():
 
 
 @pytest.fixture
-def daemon(daemon_socket):
+def daemon():
+    ensure_deleted(SOCKET_PATH)
     daemon_args = ["daemon"]
-    sock_fd = daemon_socket.fileno()
     try:
         with open("daemon_stderr.log", "w") as daemon_stderr:
             daemon_proc = subprocess.Popen(
                 [BINARY_PATH] + daemon_args,
-                pass_fds=(sock_fd,),
-                env={"SAND_SOCKFD": str(sock_fd)},
+                env={
+                    "SAND_SOCK_PATH": SOCKET_PATH,
+                    "RUST_LOG": "trace",
+                },
                 stderr=daemon_stderr,
             )
-
+            wait_for_socket(SOCKET_PATH)
             log(f"Daemon started with PID {daemon_proc.pid}")
-            # Close the socket in the parent process
-            daemon_socket.close()
             yield daemon_proc
     finally:
         log(f"Terminating daemon with PID {daemon_proc.pid}")
@@ -96,6 +70,15 @@ def daemon(daemon_socket):
         log("Waiting for daemon to terminate")
         daemon_proc.wait()
         log("Daemon terminated")
+
+
+def wait_for_socket(path, timeout=5):
+    start = time.time()
+    while not os.path.exists(path):
+        elapsed = time.time() - start
+        if elapsed > timeout:
+            raise TimeoutError(f"Socket {path} not created within {timeout}s")
+        time.sleep(0.001)
 
 
 def run_client(sock_path, args):
