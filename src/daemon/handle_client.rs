@@ -14,6 +14,7 @@ use tokio_stream::wrappers::LinesStream;
 use super::ctx::DaemonCtx;
 
 async fn handle_command(cmd: Command, ctx: &DaemonCtx) -> Response {
+    log::debug!("Handling command: {cmd:?}");
     let now = Instant::now();
     match cmd {
         Command::List => ListResponse::ok(ctx.get_timerinfo_for_client(now)).into(),
@@ -28,7 +29,7 @@ async fn handle_command(cmd: Command, ctx: &DaemonCtx) -> Response {
 }
 
 pub async fn handle_client(mut stream: UnixStream, state: DaemonCtx) {
-    log::debug!("Handling client.");
+    log::trace!("Handling client.");
 
     let (read_half, mut write_half) = stream.split();
 
@@ -60,5 +61,5 @@ pub async fn handle_client(mut stream: UnixStream, state: DaemonCtx) {
         write_half.write_all(resp_str.as_bytes()).await.unwrap();
     }
 
-    log::debug!("Client disconnected");
+    log::trace!("Client disconnected");
 }
