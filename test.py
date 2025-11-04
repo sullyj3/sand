@@ -103,24 +103,27 @@ def run_client(sock_path, args):
         [BINARY_PATH] + args,
         env={"SAND_SOCK_PATH": sock_path},
         stdout=subprocess.PIPE,
+        stderr=subprocess.PIPE,
     )
-    status = client_proc.wait()
-    output = client_proc.stdout.read().decode("utf-8")
-    return (status, output)
+    return {
+        "status": client_proc.wait(),
+        "stdout": client_proc.stdout.read().decode("utf-8"),
+        "stderr": client_proc.stderr.read().decode("utf-8"),
+    }
 
 
 class TestClient:
     def test_list_none(self, daemon):
-        (status, output) = run_client(SOCKET_PATH, ["list"])
-        assert status == 0, f"Client exited with status {status}"
+        result = run_client(SOCKET_PATH, ["list"])
+        assert result["status"] == 0, f"Client exited with status {result['status']}"
         expected_stdout = "There are currently no timers."
-        assert output.strip() == expected_stdout
+        assert result["stdout"].strip() == expected_stdout
 
     def test_add(self, daemon):
-        (status, output) = run_client(SOCKET_PATH, ["start", "10m"])
-        assert status == 0, f"Client exited with status {status}"
+        result = run_client(SOCKET_PATH, ["start", "10m"])
+        assert result["status"] == 0, f"Client exited with status {result['status']}"
         expected_stdout = "Timer #1 created for 00:10:00.000."
-        assert output.strip() == expected_stdout
+        assert result["stdout"].strip() == expected_stdout
 
 
 @contextmanager
