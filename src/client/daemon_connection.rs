@@ -48,6 +48,11 @@ impl DaemonConnection {
         self.recv::<CancelTimerResponse>()
     }
 
+    pub fn again(&mut self) -> io::Result<AgainResponse> {
+        self.send(Command::Again)?;
+        self.recv::<AgainResponse>()
+    }
+
     fn send(&mut self, cmd: Command) -> io::Result<()> {
         let str = serde_json::to_string(&cmd).expect("failed to serialize Command {cmd}");
         writeln!(self.write, "{str}")

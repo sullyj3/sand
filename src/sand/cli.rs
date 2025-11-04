@@ -77,4 +77,6 @@ pub enum ClientCommand {
     Resume { timer_ids: Vec<TimerId> },
     /// Cancel the timers with the given IDs
     Cancel { timer_ids: Vec<TimerId> },
+    /// Start a new timer with the same duration as the most recently started one.
+    Again,
 }

@@ -22,6 +22,7 @@ enum ClientError {
     AlreadyPaused(TimerId),
     AlreadyRunning(TimerId),
     NoNextDue,
+    NonePreviouslyStarted,
 }
 
 impl Display for ClientError {
@@ -36,6 +37,9 @@ impl Display for ClientError {
                 write!(f, "Timer {timer_id} is already running.")
             }
             ClientError::NoNextDue => write!(f, "No running timers."),
+            ClientError::NonePreviouslyStarted => {
+                write!(f, "No timers have been previously started.")
+            }
         }
     }
 }
@@ -97,6 +101,7 @@ pub fn main(cli_cmd: cli::ClientCommand) -> io::Result<()> {
         cli::ClientCommand::Pause { timer_ids } => pause(&mut conn, timer_ids),
         cli::ClientCommand::Resume { timer_ids } => resume(&mut conn, timer_ids),
         cli::ClientCommand::Cancel { timer_ids } => cancel(&mut conn, timer_ids),
+        cli::ClientCommand::Again => again(&mut conn),
     };
     // the individual command handler functions do all printing of success and
     // errors. The result does not need to be displayed, and is only used to determine the exit code.
@@ -213,4 +218,19 @@ fn cancel(conn: &mut DaemonConnection, timer_ids: Vec<TimerId>) -> ClientResult<
         }
     }
     ret
+}
+
+fn again(conn: &mut DaemonConnection) -> ClientResult<()> {
+    match conn.again()? {
+        AgainResponse::NonePreviouslyStarted => {
+            let err = ClientError::NonePreviouslyStarted;
+            eprintln!("{err}");
+            Err(err)
+        }
+        AgainResponse::Ok { id, duration } => {
+            let dur_string = Duration::from_millis(duration).format_colon_separated();
+            println!("Timer {id} created for same duration as last: {dur_string}.");
+            Ok(())
+        }
+    }
 }
