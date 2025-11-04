@@ -1,3 +1,5 @@
+use std::time::Duration;
+
 use derive_more::From;
 use serde::{Deserialize, Serialize};
 
@@ -7,8 +9,7 @@ use crate::sand::timer::*;
 #[serde(rename_all = "lowercase")]
 pub enum Command {
     List,
-    // TODO is it possible to use Duration directly somehow?
-    StartTimer { duration: u64 },
+    StartTimer { duration: Duration },
     PauseTimer(TimerId),
     ResumeTimer(TimerId),
     CancelTimer(TimerId),

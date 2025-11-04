@@ -50,28 +50,24 @@ pub enum TimerState {
 pub struct TimerInfoForClient {
     pub id: TimerId,
     pub state: TimerState,
-    pub remaining_millis: u64,
+    pub remaining: Duration,
 }
 
 impl TimerInfoForClient {
     pub fn new(id: TimerId, timer: &Timer, now: Instant) -> Self {
-        let (state, remaining_millis) = match timer {
-            Timer::Paused(PausedTimer { remaining }) => {
-                (TimerState::Paused, remaining.as_millis() as u64)
-            }
-            Timer::Running(RunningTimer { due, .. }) => {
-                (TimerState::Running, (*due - now).as_millis() as u64)
-            }
+        let (state, remaining) = match timer {
+            Timer::Paused(PausedTimer { remaining }) => (TimerState::Paused, *remaining),
+            Timer::Running(RunningTimer { due, .. }) => (TimerState::Running, (*due - now)),
         };
         Self {
             id,
             state,
-            remaining_millis,
+            remaining,
         }
     }
 
     pub fn cmp_by_next_due(t1: &Self, t2: &Self) -> Ordering {
-        t1.remaining_millis.cmp(&t2.remaining_millis)
+        t1.remaining.cmp(&t2.remaining)
     }
 
     pub fn cmp_by_id(t1: &Self, t2: &Self) -> Ordering {

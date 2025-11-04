@@ -1,4 +1,3 @@
-use std::time::Duration;
 use std::time::Instant;
 
 use crate::sand::message::ListResponse;
@@ -19,9 +18,7 @@ async fn handle_command(cmd: Command, ctx: &DaemonCtx) -> Response {
     match cmd {
         Command::List => ListResponse::ok(ctx.get_timerinfo_for_client(now)).into(),
         Command::StartTimer { duration } => {
-            let duration = Duration::from_millis(duration);
-            let id = ctx.start_timer(now, duration).await;
-            StartTimerResponse::ok(id).into()
+            StartTimerResponse::ok(ctx.start_timer(now, duration).await).into()
         }
         Command::PauseTimer(id) => ctx.pause_timer(id, now).into(),
         Command::ResumeTimer(id) => ctx.resume_timer(id, now).into(),

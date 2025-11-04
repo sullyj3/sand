@@ -143,7 +143,7 @@ def msg_and_response(msg):
 # Since the amount of time elapsed is not deterministic, for most tests we want
 # to ignore the specific amount of time elapsed/remaining.
 IGNORE_MILLIS = r".+\['millis'\]$"
-IGNORE_REMAINING_MILLIS = r".+\['remaining_millis'\]$"
+IGNORE_REMAINING = r".+\['remaining'\]$"
 
 
 class TestDaemon:
@@ -161,7 +161,7 @@ class TestDaemon:
         assert not diff, f"Response shape mismatch:\n{pformat(diff)}"
 
     def test_add(self, daemon):
-        msg = {"starttimer": {"duration": 60000}}
+        msg = {"starttimer": {"duration": {"secs": 60, "nanos": 0}}}
         expected = {"ok": {"id": 1}}
 
         response = msg_and_response(msg)
@@ -169,16 +169,16 @@ class TestDaemon:
         assert not diff, f"Response shape mismatch:\n{pformat(diff)}"
 
     def test_list(self, daemon):
-        msg_and_response({"starttimer": {"duration": 10 * 60 * 1000}})
-        msg_and_response({"starttimer": {"duration": 20 * 60 * 1000}})
+        msg_and_response({"starttimer": {"duration": {"secs": 10 * 60, "nanos": 0}}})
+        msg_and_response({"starttimer": {"duration": {"secs": 20 * 60, "nanos": 0}}})
 
         response = msg_and_response("list")
 
         expected_shape = {
             "ok": {
                 "timers": [
-                    {"id": 2, "state": "Running", "remaining_millis": 0},
-                    {"id": 1, "state": "Running", "remaining_millis": 0},
+                    {"id": 2, "state": "Running", "remaining": None},
+                    {"id": 1, "state": "Running", "remaining": None},
                 ]
             }
         }
@@ -186,7 +186,7 @@ class TestDaemon:
         diff = DeepDiff(
             expected_shape,
             response,
-            exclude_regex_paths=IGNORE_REMAINING_MILLIS,
+            exclude_regex_paths=IGNORE_REMAINING,
             ignore_order=True,
         )
         assert not diff, f"Response shape mismatch:\n{pformat(diff)}"
@@ -197,12 +197,12 @@ class TestDaemon:
 
         response = msg_and_response("list")
         expected_shape = {
-            "ok": {"timers": [{"id": 1, "state": "Paused", "remaining_millis": 0}]}
+            "ok": {"timers": [{"id": 1, "state": "Paused", "remaining": None}]}
         }
         diff = DeepDiff(
             expected_shape,
             response,
-            exclude_regex_paths=IGNORE_REMAINING_MILLIS,
+            exclude_regex_paths=IGNORE_REMAINING,
             ignore_order=True,
         )
         assert not diff, f"Response shape mismatch:\n{pformat(diff)}"
@@ -211,12 +211,12 @@ class TestDaemon:
 
         response = msg_and_response("list")
         expected_shape = {
-            "ok": {"timers": [{"id": 1, "state": "Running", "remaining_millis": 0}]}
+            "ok": {"timers": [{"id": 1, "state": "Running", "remaining": None}]}
         }
         diff = DeepDiff(
             expected_shape,
             response,
-            exclude_regex_paths=IGNORE_REMAINING_MILLIS,
+            exclude_regex_paths=IGNORE_REMAINING,
             ignore_order=True,
         )
         assert not diff, f"Response shape mismatch:\n{pformat(diff)}"
@@ -236,12 +236,12 @@ class TestDaemon:
 
         response = msg_and_response("list")
         expected_shape = {
-            "ok": {"timers": [{"id": 1, "state": "Paused", "remaining_millis": 0}]}
+            "ok": {"timers": [{"id": 1, "state": "Paused", "remaining": None}]}
         }
         diff = DeepDiff(
             expected_shape,
             response,
-            exclude_regex_paths=IGNORE_REMAINING_MILLIS,
+            exclude_regex_paths=IGNORE_REMAINING,
             ignore_order=True,
         )
         assert not diff, f"Response shape mismatch:\n{pformat(diff)}"

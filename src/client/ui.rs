@@ -1,5 +1,4 @@
 use std::fmt::{Display, Write};
-use std::time::Duration;
 
 use crossterm::style::Stylize;
 
@@ -50,15 +49,14 @@ pub fn ls(mut timers: Vec<TimerInfoForClient>) -> impl Display {
 
     let remaining_header = "Remaining";
     let remaining_column_width = {
-        let max_remaining = timers
+        let widest_remaining_duration = timers
             .iter()
-            .map(|ti| ti.remaining_millis)
+            .map(|ti| ti.remaining)
             .max()
-            .expect("timers.len() != 0");
-        let max_remaining_len = Duration::from_millis(max_remaining)
+            .expect("timers.len() != 0")
             .format_colon_separated()
             .len();
-        max_remaining_len.max(remaining_header.len())
+        widest_remaining_duration.max(remaining_header.len())
     };
 
     let gap = "  ";
@@ -105,8 +103,7 @@ fn timers_table_row(
     timer_info: &TimerInfoForClient,
     table_config: &TableConfig,
 ) {
-    let remaining: String =
-        Duration::from_millis(timer_info.remaining_millis).format_colon_separated();
+    let remaining: String = timer_info.remaining.format_colon_separated();
     let id = timer_info.id;
     let play_pause = match timer_info.state {
         TimerState::Paused => " ⏸ ",
@@ -129,6 +126,6 @@ pub fn next_due(timer: &TimerInfoForClient) -> impl Display {
     format!(
         "Timer {}: {} left\n",
         timer.id,
-        Duration::from_millis(timer.remaining_millis).format_colon_separated()
+        timer.remaining.format_colon_separated()
     )
 }

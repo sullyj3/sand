@@ -22,9 +22,7 @@ impl DaemonConnection {
     }
 
     pub fn add_timer(&mut self, duration: Duration) -> io::Result<StartTimerResponse> {
-        self.send(Command::StartTimer {
-            duration: duration.as_millis() as u64,
-        })?;
+        self.send(Command::StartTimer { duration })?;
         self.recv::<StartTimerResponse>()
     }
 
