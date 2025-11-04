@@ -110,27 +110,63 @@ fn load_user_sound() -> SoundLoadResult<Sound> {
         .unwrap_or(Err(SoundLoadError::NotFound))
 }
 
-fn default_sound_path() -> PathBuf {
-    let mut path: PathBuf = if cfg!(debug_assertions) {
-        log::info!("target is debug, loading sound relative to current working directory");
-        PathBuf::from("./resources")
-    } else {
-        log::trace!("target is release, loading sound from /usr/share");
-        Path::new("/usr/share").join(PKGNAME)
-    };
-    path.push(SOUND_FILENAME);
-    path.add_extension("flac");
-    path
-}
-
+// TODO fix this mess
 fn load_default_sound() -> SoundLoadResult<Sound> {
     log::debug!("Attempting to load sound from default path");
-    let path = default_sound_path();
-    let sound = load_sound(&path);
-    if sound.is_ok() {
-        log::info!("Loaded default sound from {}", path.display());
+
+    if cfg!(debug_assertions) {
+        log::info!("target is debug, loading sound relative to current working directory");
+        let mut path = PathBuf::from("./resources").join(SOUND_FILENAME);
+        path.add_extension("flac");
+        let sound = load_sound(&path);
+        match &sound {
+            Ok(_) => log::info!("Loaded default sound from {}", path.display()),
+            Err(err) => log::error!(
+                "Failed to load default sound from {}: {}",
+                path.display(),
+                err
+            ),
+        }
+        sound
+    } else {
+        // TODO compile PREFIX into the binary instead of checking both at runtime
+        {
+            log::trace!("target is release, attempting to load sound from /usr/share");
+            let mut path = Path::new("/usr/share").join(PKGNAME);
+            path.push(SOUND_FILENAME);
+            path.add_extension("flac");
+            match load_sound(&path) {
+                Ok(sound) => {
+                    log::info!("Loaded default sound from {}", path.display());
+                    return Ok(sound);
+                }
+                Err(err) => {
+                    log::debug!("Failed to load default sound from /usr/share: {}", err)
+                }
+            }
+        }
+
+        {
+            log::trace!("Attempting to load sound from /usr/local/share");
+            let mut path = Path::new("/usr/local/share").join(PKGNAME);
+            path.push(SOUND_FILENAME);
+            path.add_extension("flac");
+            let sound = load_sound(&path);
+            match sound {
+                Ok(sound) => {
+                    log::info!("Loaded default sound from {}", path.display());
+                    return Ok(sound);
+                }
+                Err(ref err) => {
+                    log::debug!(
+                        "Failed to load default sound from /usr/local/share: {}",
+                        err
+                    )
+                }
+            }
+            sound
+        }
     }
-    sound
 }
 
 fn load_elapsed_sound() -> SoundLoadResult<Sound> {
