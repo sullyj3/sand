@@ -6,7 +6,6 @@ Sand integration tests.
 
 import time
 import socket
-import sys
 import os
 import fcntl
 import subprocess
@@ -94,9 +93,9 @@ def daemon(daemon_socket):
     finally:
         log(f"Terminating daemon with PID {daemon_proc.pid}")
         daemon_proc.terminate()
-        log(f"Waiting for daemon to terminate")
+        log("Waiting for daemon to terminate")
         daemon_proc.wait()
-        log(f"Daemon terminated")
+        log("Daemon terminated")
 
 
 def run_client(sock_path, args):
