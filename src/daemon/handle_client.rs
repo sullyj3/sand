@@ -1,11 +1,12 @@
 use std::time::Duration;
 use std::time::Instant;
 
-use crate::sand::message::StartTimerResponse;
+use crate::sand::message::AgainResponse;
 use crate::sand::message::CancelTimerResponse;
 use crate::sand::message::ListResponse;
 use crate::sand::message::PauseTimerResponse;
 use crate::sand::message::ResumeTimerResponse;
+use crate::sand::message::StartTimerResponse;
 use crate::sand::message::{Command, Response};
 use crate::sand::timer::TimerId;
 use serde_json::Error;
@@ -33,9 +34,9 @@ impl CmdHandlerCtx {
         ListResponse::ok(self.state.get_timerinfo_for_client(self.now))
     }
 
-    fn start_timer(&self, duration: u64) -> StartTimerResponse {
+    async fn start_timer(&self, duration: u64) -> StartTimerResponse {
         let duration = Duration::from_millis(duration);
-        let id = self.state.start_timer(self.now, duration);
+        let id = self.state.start_timer(self.now, duration).await;
         StartTimerResponse::ok(id)
     }
 
@@ -50,16 +51,21 @@ impl CmdHandlerCtx {
     fn cancel_timer(&self, id: TimerId) -> CancelTimerResponse {
         self.state.cancel_timer(id, self.now)
     }
+
+    async fn again(&self) -> AgainResponse {
+        self.state.again(self.now).await
+    }
 }
 
-fn handle_command(cmd: Command, state: &DaemonCtx) -> Response {
+async fn handle_command(cmd: Command, state: &DaemonCtx) -> Response {
     let ctx = CmdHandlerCtx::new(state.clone());
     match cmd {
         Command::List => ctx.list().into(),
-        Command::StartTimer { duration } => ctx.start_timer(duration).into(),
+        Command::StartTimer { duration } => ctx.start_timer(duration).await.into(),
         Command::PauseTimer(id) => ctx.pause_timer(id).into(),
         Command::ResumeTimer(id) => ctx.resume_timer(id).into(),
         Command::CancelTimer(id) => ctx.cancel_timer(id).into(),
+        Command::Again => ctx.again().await.into(),
     }
 }
 
@@ -84,7 +90,7 @@ pub async fn handle_client(mut stream: UnixStream, state: DaemonCtx) {
         let rcmd: Result<Command, Error> = serde_json::from_str(&line);
 
         let resp: Response = match rcmd {
-            Ok(cmd) => handle_command(cmd, &state),
+            Ok(cmd) => handle_command(cmd, &state).await,
             Err(e) => {
                 let err_msg: String = format!("Failed to parse client message as Command: {e}");
                 log::error!("{err_msg}");
