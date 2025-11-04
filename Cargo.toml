@@ -25,4 +25,4 @@ serde_json = "1.0.122"
 termbg = "0.6.2"
 tokio = { version = "1.39.2", features = ["rt-multi-thread", "net", "macros"] }
 tokio-stream = { version = "0.1.15", features = ["io-util"] }
-zbus = { version = "5.12.0", features = ["tokio"] }
+zbus = { version = "5.12.0", features = ["default"] }
