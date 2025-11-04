@@ -11,6 +11,7 @@ pub enum Command {
     PauseTimer(TimerId),
     ResumeTimer(TimerId),
     CancelTimer(TimerId),
+    Again,
 }
 
 #[derive(Debug, PartialEq, Serialize, Deserialize)]
@@ -58,6 +59,13 @@ pub enum ResumeTimerResponse {
     AlreadyRunning,
 }
 
+#[derive(Debug, PartialEq, Serialize, Deserialize)]
+#[serde(rename_all = "lowercase")]
+pub enum AgainResponse {
+    Ok { id: TimerId, duration: u64 },
+    NonePreviouslyStarted,
+}
+
 #[derive(Serialize, Deserialize, From)]
 #[serde(untagged)]
 pub enum Response {
@@ -66,6 +74,7 @@ pub enum Response {
     CancelTimer(CancelTimerResponse),
     PauseTimer(PauseTimerResponse),
     ResumeTimer(ResumeTimerResponse),
+    Again(AgainResponse),
 
     #[from(ignore)]
     Error(String),

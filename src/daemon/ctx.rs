@@ -5,6 +5,7 @@ use std::time::SystemTime;
 
 use logind_zbus::manager::ManagerProxy;
 use tokio::sync::Notify;
+use tokio::sync::RwLock;
 use tokio::sync::mpsc::Sender;
 use tokio_stream::Stream;
 use tokio_stream::StreamExt;
@@ -25,6 +26,7 @@ pub struct DaemonCtx {
     pub timers: Arc<Timers>,
     pub tx_elapsed_events: Sender<ElapsedEvent>,
     pub refresh_next_due: Arc<Notify>,
+    pub last_started: Arc<RwLock<Option<Duration>>>,
 }
 
 /// Used to pause the time keeping task during suspend
@@ -171,7 +173,22 @@ impl DaemonCtx {
         }
     }
 
-    pub fn start_timer(&self, now: Instant, duration: Duration) -> TimerId {
+    pub async fn start_timer(&self, now: Instant, duration: Duration) -> TimerId {
+        let id = self._start_timer(now, duration);
+        log::info!(
+            "Started timer {} for {}",
+            id,
+            duration.format_colon_separated()
+        );
+        {
+            log::trace!("Setting ctx.last_started = {duration:?}");
+            *self.last_started.write().await = Some(duration);
+        }
+        id
+    }
+
+    /// Helper for start_timer() and again()
+    fn _start_timer(&self, now: Instant, duration: Duration) -> TimerId {
         let vacant = self.timers.first_vacant_entry();
         let id = *vacant.key();
 
@@ -179,11 +196,6 @@ impl DaemonCtx {
             due: now + duration,
         }));
         self.refresh_next_due.notify_one();
-        log::info!(
-            "Started timer {} for {}",
-            id,
-            duration.format_colon_separated()
-        );
         id
     }
 
@@ -274,6 +286,26 @@ impl DaemonCtx {
         entry.remove();
         self.refresh_next_due.notify_one();
         Resp::Ok
+    }
+
+    pub async fn again(&self, now: Instant) -> message::AgainResponse {
+        use message::AgainResponse as Resp;
+        let last_started = { *self.last_started.read().await };
+        match last_started {
+            Some(duration) => {
+                let id = self._start_timer(now, duration);
+                log::info!(
+                    "Restarted most recent timer duration {} with new id {}",
+                    duration.format_colon_separated(),
+                    id,
+                );
+                Resp::Ok {
+                    id,
+                    duration: duration.as_millis() as u64,
+                }
+            }
+            None => Resp::NonePreviouslyStarted,
+        }
     }
 }
 

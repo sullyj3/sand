@@ -16,6 +16,7 @@ use std::path::PathBuf;
 use std::sync::Arc;
 use tokio;
 use tokio::sync::Notify;
+use tokio::sync::RwLock;
 use tokio::sync::mpsc;
 
 use crate::cli;
@@ -229,6 +230,7 @@ pub fn main(_args: cli::DaemonArgs) -> io::Result<()> {
         timers: Default::default(),
         tx_elapsed_events,
         refresh_next_due: Arc::new(Notify::new()),
+        last_started: Arc::new(RwLock::new(None)),
     };
 
     tokio::runtime::Runtime::new()?.block_on(daemon(ctx, rx_elapsed_events))

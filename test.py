@@ -253,6 +253,17 @@ class TestDaemon:
         diff = DeepDiff(expected_shape, response, ignore_order=True)
         assert not diff, f"Response shape mismatch:\n{pformat(diff)}"
 
+    def test_again(self, daemon):
+        response = msg_and_response("again")
+        expected = "nonepreviouslystarted"
+        assert response == expected
+
+        run_client(SOCKET_PATH, ["start", "1s"])
+        response = msg_and_response("again")
+        expected_shape = {"ok": {"id": 2, "duration": 1000}}
+        diff = DeepDiff(expected_shape, response, ignore_order=True)
+        assert not diff, f"Response shape mismatch:\n{pformat(diff)}"
+
 
 """
 Need to get this down. I think by eliminating any `import Lean`.
