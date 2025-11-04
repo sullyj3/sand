@@ -1,14 +1,9 @@
 use std::time::Duration;
 use std::time::Instant;
 
-use crate::sand::message::AgainResponse;
-use crate::sand::message::CancelTimerResponse;
 use crate::sand::message::ListResponse;
-use crate::sand::message::PauseTimerResponse;
-use crate::sand::message::ResumeTimerResponse;
 use crate::sand::message::StartTimerResponse;
 use crate::sand::message::{Command, Response};
-use crate::sand::timer::TimerId;
 use serde_json::Error;
 use tokio::io::AsyncBufReadExt;
 use tokio::io::AsyncWriteExt;
@@ -19,53 +14,19 @@ use tokio_stream::wrappers::LinesStream;
 
 use super::ctx::DaemonCtx;
 
-struct CmdHandlerCtx {
-    now: Instant,
-    state: DaemonCtx,
-}
-
-impl CmdHandlerCtx {
-    fn new(state: DaemonCtx) -> Self {
-        let now = Instant::now();
-        Self { now, state }
-    }
-
-    fn list(&self) -> ListResponse {
-        ListResponse::ok(self.state.get_timerinfo_for_client(self.now))
-    }
-
-    async fn start_timer(&self, duration: u64) -> StartTimerResponse {
-        let duration = Duration::from_millis(duration);
-        let id = self.state.start_timer(self.now, duration).await;
-        StartTimerResponse::ok(id)
-    }
-
-    fn pause_timer(&self, id: TimerId) -> PauseTimerResponse {
-        self.state.pause_timer(id, self.now)
-    }
-
-    fn resume_timer(&self, id: TimerId) -> ResumeTimerResponse {
-        self.state.resume_timer(id, self.now)
-    }
-
-    fn cancel_timer(&self, id: TimerId) -> CancelTimerResponse {
-        self.state.cancel_timer(id, self.now)
-    }
-
-    async fn again(&self) -> AgainResponse {
-        self.state.again(self.now).await
-    }
-}
-
 async fn handle_command(cmd: Command, state: &DaemonCtx) -> Response {
-    let ctx = CmdHandlerCtx::new(state.clone());
+    let now = Instant::now();
     match cmd {
-        Command::List => ctx.list().into(),
-        Command::StartTimer { duration } => ctx.start_timer(duration).await.into(),
-        Command::PauseTimer(id) => ctx.pause_timer(id).into(),
-        Command::ResumeTimer(id) => ctx.resume_timer(id).into(),
-        Command::CancelTimer(id) => ctx.cancel_timer(id).into(),
-        Command::Again => ctx.again().await.into(),
+        Command::List => ListResponse::ok(state.get_timerinfo_for_client(now)).into(),
+        Command::StartTimer { duration } => {
+            let duration = Duration::from_millis(duration);
+            let id = state.start_timer(now, duration).await;
+            StartTimerResponse::ok(id).into()
+        }
+        Command::PauseTimer(id) => state.pause_timer(id, now).into(),
+        Command::ResumeTimer(id) => state.resume_timer(id, now).into(),
+        Command::CancelTimer(id) => state.cancel_timer(id, now).into(),
+        Command::Again => state.again(now).await.into(),
     }
 }
 

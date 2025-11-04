@@ -7,6 +7,7 @@ use crate::sand::timer::*;
 #[serde(rename_all = "lowercase")]
 pub enum Command {
     List,
+    // TODO is it possible to use Duration directly somehow?
     StartTimer { duration: u64 },
     PauseTimer(TimerId),
     ResumeTimer(TimerId),
