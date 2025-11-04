@@ -4,8 +4,8 @@ use std::time::Instant;
 use std::time::SystemTime;
 
 use logind_zbus::manager::ManagerProxy;
-use tokio::sync::mpsc::Sender;
 use tokio::sync::Notify;
+use tokio::sync::mpsc::Sender;
 use tokio_stream::Stream;
 use tokio_stream::StreamExt;
 
@@ -121,7 +121,10 @@ impl DaemonCtx {
         let sleep_duration = match woke_at.duration_since(slept_at) {
             Ok(dur) => dur,
             Err(err) => {
-                log::error!("When waking, system clock reported having gone backwards in time since sleeping by {:?}. Assuming no time passed", err.duration());
+                log::error!(
+                    "When waking, system clock reported having gone backwards in time since sleeping by {:?}. Assuming no time passed",
+                    err.duration()
+                );
                 Duration::ZERO
             }
         };
