@@ -16,18 +16,14 @@ use std::sync::Arc;
 use tokio;
 use tokio::sync::Notify;
 use tokio::sync::RwLock;
-use tokio::sync::mpsc;
 
 use crate::cli;
 use crate::daemon::audio::ElapsedSoundPlayer;
 use crate::sand::socket::env_sock_path;
-use crate::sand::timer::TimerId;
 use ctx::DaemonCtx;
 use handle_client::handle_client;
 
 const SYSTEMD_SOCKFD: RawFd = 3;
-
-struct ElapsedEvent(TimerId);
 
 /////////////////////////////////////////////////////////////////////////////////////////
 // Setup
@@ -211,9 +207,6 @@ pub fn main(_args: cli::DaemonArgs) -> io::Result<()> {
 }
 
 async fn daemon() -> io::Result<()> {
-    // Channel for reporting elapsed timers
-    let (tx_elapsed_events, rx_elapsed_events) = mpsc::channel(20);
-
     let elapsed_sound_player = ElapsedSoundPlayer::new()
         .inspect(|_| log::debug!("ElapsedSoundPlayer successfully initialized."))
         .inspect_err(|_| {
@@ -225,19 +218,10 @@ async fn daemon() -> io::Result<()> {
 
     let ctx = DaemonCtx {
         timers: Default::default(),
-        tx_elapsed_events,
         refresh_next_due: Arc::new(Notify::new()),
         last_started: Arc::new(RwLock::new(None)),
         elapsed_sound_player,
     };
-
-    // Generate notifications and sounds for elapsed timers
-    tokio::spawn({
-        let ctx = ctx.clone();
-        async move {
-            ctx.notifier_thread(rx_elapsed_events).await;
-        }
-    });
 
     let c_ctx = ctx.clone();
     tokio::spawn(async move {

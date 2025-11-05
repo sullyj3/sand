@@ -7,12 +7,9 @@ use logind_zbus::manager::ManagerProxy;
 use notify_rust::Notification;
 use tokio::sync::Notify;
 use tokio::sync::RwLock;
-use tokio::sync::mpsc;
-use tokio::sync::mpsc::Sender;
 use tokio_stream::Stream;
 use tokio_stream::StreamExt;
 
-use crate::daemon::ElapsedEvent;
 use crate::daemon::audio::ElapsedSoundPlayer;
 use crate::sand::duration::DurationExt;
 use crate::sand::message;
@@ -27,7 +24,6 @@ use crate::sand::timers::Timers;
 #[derive(Clone)]
 pub struct DaemonCtx {
     pub timers: Arc<Timers>,
-    pub tx_elapsed_events: Sender<ElapsedEvent>,
     pub refresh_next_due: Arc<Notify>,
     pub last_started: Arc<RwLock<Option<Duration>>>,
     pub elapsed_sound_player: Option<ElapsedSoundPlayer>,
@@ -74,14 +70,6 @@ async fn dbus_suspend_events() -> zbus::Result<impl Stream<Item = SuspendSignal>
 }
 
 impl DaemonCtx {
-    pub async fn notifier_thread(&self, mut elapsed_events: mpsc::Receiver<ElapsedEvent>) -> ! {
-        while let Some(ElapsedEvent(timer_id)) = elapsed_events.recv().await {
-            let player = self.elapsed_sound_player.clone();
-            tokio::spawn(do_notification(player, timer_id));
-        }
-        unreachable!("bug: elapsed_events channel was closed.")
-    }
-
     pub fn get_timerinfo_for_client(&self, now: Instant) -> Vec<TimerInfoForClient> {
         self.timers.get_timerinfo_for_client(now)
     }
@@ -146,10 +134,10 @@ impl DaemonCtx {
 
         let elapsed_while_sleeping = self.timers.awaken(sleep_duration);
         for timer_id in elapsed_while_sleeping {
-            self.tx_elapsed_events
-                .send(ElapsedEvent(timer_id))
-                .await
-                .expect("elapsed event receiver was closed");
+            tokio::spawn({
+                let elapsed_sound_player = self.elapsed_sound_player.clone();
+                async move { do_notification(elapsed_sound_player, timer_id).await }
+            });
         }
         KeepTimeState::Awake
     }
@@ -174,10 +162,12 @@ impl DaemonCtx {
             Some(signal) = suspends_stream.next() =>
                 handle_suspend_signal_awake_state(signal),
             Some(timer_id) = next_countdown => {
-                self.tx_elapsed_events
-                    .send(ElapsedEvent(timer_id))
-                    .await
-                    .expect("elapsed event receiver was closed");
+                tokio::spawn({
+                    let elapsed_sound_player = self.elapsed_sound_player.clone();
+                    async move {
+                        do_notification(elapsed_sound_player, timer_id).await;
+                    }
+                });
                 log::info!("Timer {timer_id} completed");
                 self.timers.remove(&timer_id);
                 KeepTimeState::Awake
