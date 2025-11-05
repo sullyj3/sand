@@ -3,7 +3,6 @@ use std::time::Duration;
 use std::time::Instant;
 use std::time::SystemTime;
 
-use indoc::indoc;
 use logind_zbus::manager::ManagerProxy;
 use notify_rust::Notification;
 use tokio::sync::Notify;
@@ -31,6 +30,7 @@ pub struct DaemonCtx {
     pub tx_elapsed_events: Sender<ElapsedEvent>,
     pub refresh_next_due: Arc<Notify>,
     pub last_started: Arc<RwLock<Option<Duration>>>,
+    pub elapsed_sound_player: Option<ElapsedSoundPlayer>,
 }
 
 /// Used to pause the time keeping task during suspend
@@ -75,17 +75,8 @@ async fn dbus_suspend_events() -> zbus::Result<impl Stream<Item = SuspendSignal>
 
 impl DaemonCtx {
     pub async fn notifier_thread(&self, mut elapsed_events: mpsc::Receiver<ElapsedEvent>) -> ! {
-        let player = ElapsedSoundPlayer::new()
-            .inspect(|_| log::debug!("ElapsedSoundPlayer successfully initialized."))
-            .inspect_err(|_| {
-                log::warn!(indoc! {"
-                    Failed to initialize elapsed sound player.
-                    There will be no timer sounds."})
-            })
-            .ok();
-
         while let Some(ElapsedEvent(timer_id)) = elapsed_events.recv().await {
-            let player = player.clone();
+            let player = self.elapsed_sound_player.clone();
             tokio::spawn(do_notification(player, timer_id));
         }
         unreachable!("bug: elapsed_events channel was closed.")

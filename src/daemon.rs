@@ -19,6 +19,7 @@ use tokio::sync::RwLock;
 use tokio::sync::mpsc;
 
 use crate::cli;
+use crate::daemon::audio::ElapsedSoundPlayer;
 use crate::sand::socket::env_sock_path;
 use crate::sand::timer::TimerId;
 use ctx::DaemonCtx;
@@ -206,20 +207,30 @@ pub fn main(_args: cli::DaemonArgs) -> io::Result<()> {
     log_builder.init();
     log::info!("Starting sand daemon v{}", env!("CARGO_PKG_VERSION"));
 
+    tokio::runtime::Runtime::new()?.block_on(daemon())
+}
+
+async fn daemon() -> io::Result<()> {
     // Channel for reporting elapsed timers
     let (tx_elapsed_events, rx_elapsed_events) = mpsc::channel(20);
+
+    let elapsed_sound_player = ElapsedSoundPlayer::new()
+        .inspect(|_| log::debug!("ElapsedSoundPlayer successfully initialized."))
+        .inspect_err(|_| {
+            log::warn!(indoc! {"
+                Failed to initialize elapsed sound player.
+                There will be no timer sounds."})
+        })
+        .ok();
 
     let ctx = DaemonCtx {
         timers: Default::default(),
         tx_elapsed_events,
         refresh_next_due: Arc::new(Notify::new()),
         last_started: Arc::new(RwLock::new(None)),
+        elapsed_sound_player,
     };
 
-    tokio::runtime::Runtime::new()?.block_on(daemon(ctx, rx_elapsed_events))
-}
-
-async fn daemon(ctx: DaemonCtx, rx_elapsed_events: mpsc::Receiver<ElapsedEvent>) -> io::Result<()> {
     // Generate notifications and sounds for elapsed timers
     tokio::spawn({
         let ctx = ctx.clone();
