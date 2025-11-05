@@ -34,6 +34,8 @@ pub struct RunningTimer {
     pub due: Instant,
 }
 
+// TODO some of this is daemon-specific and should maybe go in
+// a daemon/timer.rs module
 #[derive(Debug)]
 pub struct Timer {
     /// The initial duration of the timer. Should not be modified after creation.

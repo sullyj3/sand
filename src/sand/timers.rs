@@ -20,6 +20,14 @@ impl Timers {
         self.0.entry(id)
     }
 
+    pub fn restart(&self, id: TimerId) {
+        if let Some(mut timer) = self.0.get_mut(&id) {
+            timer.state = TimerState::Running(RunningTimer {
+                due: Instant::now() + timer.initial_duration,
+            });
+        }
+    }
+
     /// Should only be called on running timers
     pub fn set_elapsed(&self, timer_id: TimerId) {
         match self.0.entry(timer_id) {

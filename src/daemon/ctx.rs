@@ -177,11 +177,22 @@ impl DaemonCtx {
     }
 
     pub async fn do_notification(&self, timer_id: TimerId) {
+        let initial_duration = match self.timers.entry(timer_id) {
+            dashmap::Entry::Vacant(_) => {
+                log::error!("Bug: do_notification called for nonexistent timer {timer_id}");
+                return;
+            }
+            dashmap::Entry::Occupied(occupied_entry) => occupied_entry.get().initial_duration,
+        };
         let notification = Notification::new()
             .summary("Time's up!")
-            .body(&format!("Timer {timer_id} has elapsed"))
+            .body(&format!(
+                "Timer {timer_id} set for {} has elapsed",
+                initial_duration.format_colon_separated()
+            ))
             .icon("alarm")
             .urgency(notify_rust::Urgency::Critical)
+            .action("restart", "⟳ Restart")
             .show_async()
             .await;
         let notification_handle = match notification {
@@ -200,10 +211,20 @@ impl DaemonCtx {
         }
 
         notification_handle.wait_for_action(|s| match s {
-            "__closed" => log::debug!("Notification for timer {timer_id} closed"),
-            _ => log::warn!("Unknown action from notification: {s}"),
+            "restart" => {
+                log::info!("Restarting timer {}", timer_id);
+                self.timers.restart(timer_id);
+                self.refresh_next_due.notify_one();
+            }
+            "__closed" => {
+                log::debug!("Notification for timer {timer_id} closed");
+                self.timers.remove(&timer_id);
+            }
+            _ => {
+                log::warn!("Unknown action from notification: {s}");
+                self.timers.remove(&timer_id);
+            }
         });
-        self.timers.remove(&timer_id);
     }
 
     pub async fn start_timer(&self, now: Instant, duration: Duration) -> TimerId {
