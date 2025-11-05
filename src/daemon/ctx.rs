@@ -135,8 +135,8 @@ impl DaemonCtx {
         let elapsed_while_sleeping = self.timers.awaken(sleep_duration);
         for timer_id in elapsed_while_sleeping {
             tokio::spawn({
-                let elapsed_sound_player = self.elapsed_sound_player.clone();
-                async move { do_notification(elapsed_sound_player, timer_id).await }
+                let ctx = self.clone();
+                async move { ctx.do_notification(timer_id).await }
             });
         }
         KeepTimeState::Awake
@@ -163,15 +163,34 @@ impl DaemonCtx {
                 handle_suspend_signal_awake_state(signal),
             Some(timer_id) = next_countdown => {
                 tokio::spawn({
-                    let elapsed_sound_player = self.elapsed_sound_player.clone();
+                    let ctx = self.clone();
                     async move {
-                        do_notification(elapsed_sound_player, timer_id).await;
+                        ctx.do_notification(timer_id).await;
                     }
                 });
                 log::info!("Timer {timer_id} completed");
                 self.timers.remove(&timer_id);
                 KeepTimeState::Awake
             }
+        }
+    }
+
+    pub async fn do_notification(&self, timer_id: TimerId) {
+        let notification = Notification::new()
+            .summary("Time's up!")
+            .body(&format!("Timer {timer_id} has elapsed"))
+            .icon("alarm")
+            .urgency(notify_rust::Urgency::Critical)
+            .show();
+        if let Err(e) = notification {
+            log::error!("Error showing desktop notification: {e}");
+        }
+
+        if let Some(ref player) = self.elapsed_sound_player {
+            log::debug!("playing sound");
+            player.play().await;
+        } else {
+            log::debug!("player is None - not playing sound");
         }
     }
 
@@ -331,24 +350,5 @@ fn handle_suspend_signal_awake_state(signal: SuspendSignal) -> KeepTimeState {
                 slept_at: SystemTime::now(),
             }
         }
-    }
-}
-
-pub async fn do_notification(player: Option<ElapsedSoundPlayer>, timer_id: TimerId) {
-    let notification = Notification::new()
-        .summary("Time's up!")
-        .body(&format!("Timer {timer_id} has elapsed"))
-        .icon("alarm")
-        .urgency(notify_rust::Urgency::Critical)
-        .show();
-    if let Err(e) = notification {
-        log::error!("Error showing desktop notification: {e}");
-    }
-
-    if let Some(ref player) = player {
-        log::debug!("playing sound");
-        player.play().await;
-    } else {
-        log::debug!("player is None - not playing sound");
     }
 }
