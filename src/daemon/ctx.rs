@@ -3,14 +3,18 @@ use std::time::Duration;
 use std::time::Instant;
 use std::time::SystemTime;
 
+use indoc::indoc;
 use logind_zbus::manager::ManagerProxy;
+use notify_rust::Notification;
 use tokio::sync::Notify;
 use tokio::sync::RwLock;
+use tokio::sync::mpsc;
 use tokio::sync::mpsc::Sender;
 use tokio_stream::Stream;
 use tokio_stream::StreamExt;
 
 use crate::daemon::ElapsedEvent;
+use crate::daemon::audio::ElapsedSoundPlayer;
 use crate::sand::duration::DurationExt;
 use crate::sand::message;
 use crate::sand::timer::PausedTimer;
@@ -70,6 +74,23 @@ async fn dbus_suspend_events() -> zbus::Result<impl Stream<Item = SuspendSignal>
 }
 
 impl DaemonCtx {
+    pub async fn notifier_thread(&self, mut elapsed_events: mpsc::Receiver<ElapsedEvent>) -> ! {
+        let player = ElapsedSoundPlayer::new()
+            .inspect(|_| log::debug!("ElapsedSoundPlayer successfully initialized."))
+            .inspect_err(|_| {
+                log::warn!(indoc! {"
+                    Failed to initialize elapsed sound player.
+                    There will be no timer sounds."})
+            })
+            .ok();
+
+        while let Some(ElapsedEvent(timer_id)) = elapsed_events.recv().await {
+            let player = player.clone();
+            tokio::spawn(do_notification(player, timer_id));
+        }
+        unreachable!("bug: elapsed_events channel was closed.")
+    }
+
     pub fn get_timerinfo_for_client(&self, now: Instant) -> Vec<TimerInfoForClient> {
         self.timers.get_timerinfo_for_client(now)
     }
@@ -329,5 +350,24 @@ fn handle_suspend_signal_awake_state(signal: SuspendSignal) -> KeepTimeState {
                 slept_at: SystemTime::now(),
             }
         }
+    }
+}
+
+pub async fn do_notification(player: Option<ElapsedSoundPlayer>, timer_id: TimerId) {
+    let notification = Notification::new()
+        .summary("Time's up!")
+        .body(&format!("Timer {timer_id} has elapsed"))
+        .icon("alarm")
+        .urgency(notify_rust::Urgency::Critical)
+        .show();
+    if let Err(e) = notification {
+        log::error!("Error showing desktop notification: {e}");
+    }
+
+    if let Some(ref player) = player {
+        log::debug!("playing sound");
+        player.play().await;
+    } else {
+        log::debug!("player is None - not playing sound");
     }
 }
