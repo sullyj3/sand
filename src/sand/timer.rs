@@ -38,14 +38,20 @@ pub struct RunningTimer {
 pub enum Timer {
     Paused(PausedTimer),
     Running(RunningTimer),
+    /// We keep timers after they've elapsed in this state to reserve the timer ID,
+    /// allowing the user to restart them from the notification with the same ID.
+    Elapsed,
 }
 
 #[derive(Debug, PartialEq, Serialize, Deserialize)]
 pub enum TimerState {
     Paused,
     Running,
+    Elapsed,
 }
 
+// Given that Timer no longer contains a joinhandle, does this type still need
+// to exist?
 #[derive(Debug, PartialEq, Serialize, Deserialize)]
 pub struct TimerInfoForClient {
     pub id: TimerId,
@@ -58,6 +64,8 @@ impl TimerInfoForClient {
         let (state, remaining) = match timer {
             Timer::Paused(PausedTimer { remaining }) => (TimerState::Paused, *remaining),
             Timer::Running(RunningTimer { due, .. }) => (TimerState::Running, (*due - now)),
+            // TODO would be better to have a negative duration for this case
+            Timer::Elapsed => (TimerState::Elapsed, Duration::ZERO),
         };
         Self {
             id,

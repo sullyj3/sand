@@ -246,6 +246,10 @@ impl DaemonCtx {
                 log::error!("Timer {} is already paused", id);
                 Resp::AlreadyPaused
             }
+            T::Elapsed => {
+                log::error!("Timer {} is already elapsed", id);
+                Resp::AlreadyElapsed
+            }
         }
     }
 
@@ -276,6 +280,10 @@ impl DaemonCtx {
                 log::error!("Timer {} is already running", id);
                 Resp::AlreadyRunning
             }
+            T::Elapsed => {
+                log::error!("Timer {} is already elapsed", id);
+                Resp::AlreadyElapsed
+            }
         }
     }
 
@@ -302,6 +310,10 @@ impl DaemonCtx {
                     id,
                     remaining.format_colon_separated()
                 );
+            }
+            Timer::Elapsed => {
+                log::error!("Timer {} is already elapsed", id);
+                return Resp::AlreadyElapsed;
             }
         }
         entry.remove();

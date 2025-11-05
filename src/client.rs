@@ -23,6 +23,7 @@ enum ClientError {
     AlreadyRunning(TimerId),
     NoNextDue,
     NonePreviouslyStarted,
+    AlreadyElapsed(TimerId),
 }
 
 impl Display for ClientError {
@@ -35,6 +36,9 @@ impl Display for ClientError {
             }
             ClientError::AlreadyRunning(timer_id) => {
                 write!(f, "Timer {timer_id} is already running.")
+            }
+            ClientError::AlreadyElapsed(timer_id) => {
+                write!(f, "Timer {timer_id} has already elapsed.")
             }
             ClientError::NoNextDue => write!(f, "No running timers."),
             ClientError::NonePreviouslyStarted => {
@@ -168,6 +172,7 @@ fn pause(conn: &mut DaemonConnection, timer_ids: Vec<TimerId>) -> ClientResult<(
             PauseTimerResponse::Ok => Ok(()),
             PauseTimerResponse::TimerNotFound => Err(ClientError::TimerNotFound(timer_id)),
             PauseTimerResponse::AlreadyPaused => Err(ClientError::AlreadyPaused(timer_id)),
+            PauseTimerResponse::AlreadyElapsed => Err(ClientError::AlreadyElapsed(timer_id)),
         };
 
         match result {
@@ -188,6 +193,7 @@ fn resume(conn: &mut DaemonConnection, timer_ids: Vec<TimerId>) -> ClientResult<
             ResumeTimerResponse::Ok => Ok(()),
             ResumeTimerResponse::TimerNotFound => Err(ClientError::TimerNotFound(timer_id)),
             ResumeTimerResponse::AlreadyRunning => Err(ClientError::AlreadyRunning(timer_id)),
+            ResumeTimerResponse::AlreadyElapsed => Err(ClientError::AlreadyElapsed(timer_id)),
         };
 
         match result {
@@ -207,6 +213,7 @@ fn cancel(conn: &mut DaemonConnection, timer_ids: Vec<TimerId>) -> ClientResult<
         let result = match conn.cancel_timer(timer_id)? {
             CancelTimerResponse::Ok => Ok(()),
             CancelTimerResponse::TimerNotFound => Err(ClientError::TimerNotFound(timer_id)),
+            CancelTimerResponse::AlreadyElapsed => Err(ClientError::AlreadyElapsed(timer_id)),
         };
 
         match result {

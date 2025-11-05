@@ -24,12 +24,12 @@ impl Timers {
         let now = Instant::now();
         self.0
             .iter()
-            .filter_map(|rm| match rm.value() {
+            .filter_map(|ref_multi| match ref_multi.value() {
                 Timer::Running(running) => {
                     let remaining = running.due - now;
-                    Some((*rm.key(), remaining))
+                    Some((*ref_multi.key(), remaining))
                 }
-                Timer::Paused(_) => None,
+                _ => None,
             })
             .min_by_key(|&(_, duration)| duration)
     }

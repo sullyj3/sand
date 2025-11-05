@@ -108,6 +108,7 @@ fn timers_table_row(
     let play_pause = match timer_info.state {
         TimerState::Paused => " ⏸ ",
         TimerState::Running => " ▶ ",
+        TimerState::Elapsed => " ⏹ ",
     };
     let &TableConfig {
         status_column_width,
