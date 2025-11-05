@@ -181,10 +181,15 @@ impl DaemonCtx {
             .body(&format!("Timer {timer_id} has elapsed"))
             .icon("alarm")
             .urgency(notify_rust::Urgency::Critical)
-            .show();
-        if let Err(e) = notification {
-            log::error!("Error showing desktop notification: {e}");
-        }
+            .show_async()
+            .await;
+        let notification_handle = match notification {
+            Ok(notification) => notification,
+            Err(e) => {
+                log::error!("Error showing desktop notification: {e}");
+                return;
+            }
+        };
 
         if let Some(ref player) = self.elapsed_sound_player {
             log::debug!("playing sound");
@@ -192,6 +197,11 @@ impl DaemonCtx {
         } else {
             log::debug!("player is None - not playing sound");
         }
+
+        notification_handle.wait_for_action(|s| match s {
+            "__closed" => log::debug!("Notification for timer {timer_id} closed"),
+            _ => log::warn!("Unknown action from notification: {s}"),
+        });
     }
 
     pub async fn start_timer(&self, now: Instant, duration: Duration) -> TimerId {
