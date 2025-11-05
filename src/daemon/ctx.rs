@@ -162,6 +162,7 @@ impl DaemonCtx {
             Some(signal) = suspends_stream.next() =>
                 handle_suspend_signal_awake_state(signal),
             Some(timer_id) = next_countdown => {
+                self.timers.set_elapsed(timer_id);
                 tokio::spawn({
                     let ctx = self.clone();
                     async move {
@@ -169,7 +170,6 @@ impl DaemonCtx {
                     }
                 });
                 log::info!("Timer {timer_id} completed");
-                self.timers.remove(&timer_id);
                 KeepTimeState::Awake
             }
         }
@@ -202,6 +202,7 @@ impl DaemonCtx {
             "__closed" => log::debug!("Notification for timer {timer_id} closed"),
             _ => log::warn!("Unknown action from notification: {s}"),
         });
+        self.timers.remove(&timer_id);
     }
 
     pub async fn start_timer(&self, now: Instant, duration: Duration) -> TimerId {

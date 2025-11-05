@@ -1,6 +1,7 @@
 use std::time::{Duration, Instant};
 
 use dashmap::{DashMap, Entry, VacantEntry};
+use indoc::indoc;
 
 use crate::sand::timer::*;
 
@@ -12,11 +13,42 @@ use crate::sand::timer::*;
 pub struct Timers(DashMap<TimerId, Timer>);
 
 impl Timers {
+    // TODO should remove this and expose a more restrictive interface
+    // maybe even pause/resume/cancel functions. Probably a lot of the logic in
+    // ctx.rs should be in here
     pub fn entry(&self, id: TimerId) -> Entry<'_, TimerId, Timer> {
         self.0.entry(id)
     }
 
+    /// Should only be called on running timers
+    pub fn set_elapsed(&self, timer_id: TimerId) {
+        match self.0.entry(timer_id) {
+            Entry::Occupied(mut entry) => {
+                let timer = entry.get_mut();
+                match timer {
+                    Timer::Running(_) => {
+                        *timer = Timer::Elapsed;
+                    }
+                    t => log::error!(
+                        indoc! {"
+                            bug: Timer in unexpected state when set_elapsed: {:?}
+                            leaving it alone."},
+                        t
+                    ),
+                }
+            }
+            Entry::Vacant(_) => log::error!(
+                indoc! {"
+                    bug: Timer {} that we're setting as elapsed doesn't exist
+                    ignoring."},
+                timer_id
+            ),
+        }
+    }
+
+    // TODO is there any good reason for this to take id by reference?
     pub fn remove(&self, id: &TimerId) {
+        log::debug!("Removing timer {id}");
         self.0.remove(id);
     }
 
@@ -75,7 +107,7 @@ impl Timers {
             }
         }
         for timer_id in &elapsed_while_asleep {
-            self.remove(timer_id);
+            self.set_elapsed(*timer_id);
         }
         elapsed_while_asleep
     }

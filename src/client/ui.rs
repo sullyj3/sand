@@ -47,6 +47,9 @@ pub fn ls(mut timers: Vec<TimerInfoForClient>) -> impl Display {
         max_id_len.max(id_header.len())
     };
 
+    // TODO this is incorrect when timer is elapsed
+    // need to actually compute the columns first, rather than trying to
+    // predict in advance and duplicating computation
     let remaining_header = "Remaining";
     let remaining_column_width = {
         let widest_remaining_duration = timers
@@ -103,7 +106,11 @@ fn timers_table_row(
     timer_info: &TimerInfoForClient,
     table_config: &TableConfig,
 ) {
-    let remaining: String = timer_info.remaining.format_colon_separated();
+    let remaining: String = if let TimerState::Elapsed = timer_info.state {
+        "Elapsed".to_owned()
+    } else {
+        timer_info.remaining.format_colon_separated()
+    };
     let id = timer_info.id;
     let play_pause = match timer_info.state {
         TimerState::Paused => " ⏸ ",
