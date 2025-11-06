@@ -18,6 +18,7 @@ use crate::sand::timer::RunningTimer;
 use crate::sand::timer::Timer;
 use crate::sand::timer::TimerId;
 use crate::sand::timer::TimerInfoForClient;
+use crate::sand::timer::TimerState;
 use crate::sand::timers::Timers;
 
 /// Should be cheap to clone.
@@ -223,10 +224,7 @@ impl DaemonCtx {
     fn _start_timer(&self, now: Instant, duration: Duration) -> TimerId {
         let vacant = self.timers.first_vacant_entry();
         let id = *vacant.key();
-
-        vacant.insert(Timer::Running(RunningTimer {
-            due: now + duration,
-        }));
+        vacant.insert(Timer::new_running(duration, now));
         self.refresh_next_due.notify_one();
         id
     }
@@ -240,11 +238,11 @@ impl DaemonCtx {
         };
         let timer = entry.get_mut();
 
-        use Timer as T;
-        match timer {
-            T::Running(RunningTimer { due }) => {
-                let remaining = *due - now;
-                *timer = T::Paused(PausedTimer { remaining });
+        use TimerState as TS;
+        match timer.state {
+            TS::Running(RunningTimer { due }) => {
+                let remaining = due - now;
+                timer.state = TS::Paused(PausedTimer { remaining });
                 self.refresh_next_due.notify_one();
                 log::info!(
                     "Paused timer {}, {} remaining",
@@ -253,11 +251,11 @@ impl DaemonCtx {
                 );
                 Resp::Ok
             }
-            T::Paused(_) => {
+            TS::Paused(_) => {
                 log::error!("Timer {} is already paused", id);
                 Resp::AlreadyPaused
             }
-            T::Elapsed => {
+            TS::Elapsed => {
                 log::error!("Timer {} is already elapsed", id);
                 Resp::AlreadyElapsed
             }
@@ -273,25 +271,25 @@ impl DaemonCtx {
         };
         let timer = entry.get_mut();
 
-        use Timer as T;
-        match timer {
-            T::Paused(PausedTimer { remaining }) => {
+        use TimerState as TS;
+        match timer.state {
+            TS::Paused(PausedTimer { remaining }) => {
                 log::info!(
                     "Resumed timer {}, {} remaining",
                     id,
                     remaining.format_colon_separated()
                 );
-                *timer = T::Running(RunningTimer {
-                    due: now + *remaining,
+                timer.state = TS::Running(RunningTimer {
+                    due: now + remaining,
                 });
                 self.refresh_next_due.notify_one();
                 Resp::Ok
             }
-            T::Running(_) => {
+            TS::Running(_) => {
                 log::error!("Timer {} is already running", id);
                 Resp::AlreadyRunning
             }
-            T::Elapsed => {
+            TS::Elapsed => {
                 log::error!("Timer {} is already elapsed", id);
                 Resp::AlreadyElapsed
             }
@@ -306,23 +304,23 @@ impl DaemonCtx {
             return Resp::TimerNotFound;
         };
         let timer = entry.get();
-        match timer {
-            Timer::Paused(PausedTimer { remaining }) => {
+        match timer.state {
+            TimerState::Paused(PausedTimer { remaining }) => {
                 log::info!(
                     "Cancelled paused timer {} with {} remaining",
                     id,
                     remaining.format_colon_separated()
                 );
             }
-            Timer::Running(RunningTimer { due }) => {
-                let remaining = *due - now;
+            TimerState::Running(RunningTimer { due }) => {
+                let remaining = due - now;
                 log::info!(
                     "Cancelled running timer {} with {} remaining",
                     id,
                     remaining.format_colon_separated()
                 );
             }
-            Timer::Elapsed => {
+            TimerState::Elapsed => {
                 log::error!("Timer {} is already elapsed", id);
                 return Resp::AlreadyElapsed;
             }

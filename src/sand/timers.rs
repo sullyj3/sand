@@ -25,9 +25,9 @@ impl Timers {
         match self.0.entry(timer_id) {
             Entry::Occupied(mut entry) => {
                 let timer = entry.get_mut();
-                match timer {
-                    Timer::Running(_) => {
-                        *timer = Timer::Elapsed;
+                match &timer.state {
+                    TimerState::Running(RunningTimer { due: _, .. }) => {
+                        timer.state = TimerState::Elapsed;
                     }
                     t => log::error!(
                         indoc! {"
@@ -56,8 +56,8 @@ impl Timers {
         let now = Instant::now();
         self.0
             .iter()
-            .filter_map(|ref_multi| match ref_multi.value() {
-                Timer::Running(running) => {
+            .filter_map(|ref_multi| match &ref_multi.value().state {
+                TimerState::Running(running) => {
                     let remaining = running.due - now;
                     Some((*ref_multi.key(), remaining))
                 }
@@ -93,7 +93,7 @@ impl Timers {
         let now = Instant::now();
         for mut ref_mut_multi in self.0.iter_mut() {
             let (timer_id, timer) = ref_mut_multi.pair_mut();
-            let Timer::Running(running) = timer else {
+            let TimerState::Running(running) = &mut timer.state else {
                 continue;
             };
 
