@@ -4,7 +4,7 @@ use crossterm::style::Stylize;
 
 use crate::sand::{
     duration::DurationExt,
-    message::{TimerInfo, TimerStateClient},
+    message::{TimerInfo, TimerState},
 };
 
 #[derive(Debug)]
@@ -27,7 +27,7 @@ pub fn ls(mut timers: Vec<TimerInfo>) -> impl Display {
     });
     let (running, paused): (Vec<_>, Vec<_>) = timers
         .iter()
-        .partition(|ti| ti.state == TimerStateClient::Running);
+        .partition(|ti| ti.state == TimerState::Running);
 
     let mut output = String::new();
 
@@ -101,16 +101,16 @@ pub fn ls(mut timers: Vec<TimerInfo>) -> impl Display {
 }
 
 fn timers_table_row(output: &mut impl Write, timer_info: &TimerInfo, table_config: &TableConfig) {
-    let remaining: String = if let TimerStateClient::Elapsed = timer_info.state {
+    let remaining: String = if let TimerState::Elapsed = timer_info.state {
         "Elapsed".to_owned()
     } else {
         timer_info.remaining.format_colon_separated()
     };
     let id = timer_info.id;
     let play_pause = match timer_info.state {
-        TimerStateClient::Paused => " ⏸ ",
-        TimerStateClient::Running => " ▶ ",
-        TimerStateClient::Elapsed => " ⏹ ",
+        TimerState::Paused => " ⏸ ",
+        TimerState::Running => " ▶ ",
+        TimerState::Elapsed => " ⏹ ",
     };
     let &TableConfig {
         status_column_width,

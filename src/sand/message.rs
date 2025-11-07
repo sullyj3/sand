@@ -6,7 +6,7 @@ use std::{
 use derive_more::From;
 use serde::{Deserialize, Serialize};
 
-use crate::sand::timer::*;
+use crate::sand::timer::{self, PausedTimer, RunningTimer, Timer, TimerId};
 
 /////////////////////////////////////////////////////////////////////////////////////////
 // Commands
@@ -101,7 +101,7 @@ pub enum Response {
 /////////////////////////////////////////////////////////////////////////////////////////
 
 #[derive(Debug, PartialEq, Serialize, Deserialize)]
-pub enum TimerStateClient {
+pub enum TimerState {
     Paused,
     Running,
     Elapsed,
@@ -110,19 +110,19 @@ pub enum TimerStateClient {
 #[derive(Debug, PartialEq, Serialize, Deserialize)]
 pub struct TimerInfo {
     pub id: TimerId,
-    pub state: TimerStateClient,
+    pub state: TimerState,
     pub remaining: Duration,
 }
 
 impl TimerInfo {
     pub fn new(id: TimerId, timer: &Timer, now: Instant) -> Self {
         let (state, remaining) = match timer.state {
-            TimerState::Paused(PausedTimer { remaining }) => (TimerStateClient::Paused, remaining),
-            TimerState::Running(RunningTimer { due, .. }) => {
-                (TimerStateClient::Running, (due - now))
+            timer::TimerState::Paused(PausedTimer { remaining }) => (TimerState::Paused, remaining),
+            timer::TimerState::Running(RunningTimer { due, .. }) => {
+                (TimerState::Running, (due - now))
             }
             // TODO would be better to have a negative duration for this case
-            TimerState::Elapsed => (TimerStateClient::Elapsed, Duration::ZERO),
+            timer::TimerState::Elapsed => (TimerState::Elapsed, Duration::ZERO),
         };
         Self {
             id,

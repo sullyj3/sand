@@ -134,7 +134,7 @@ fn next_due(conn: &mut DaemonConnection) -> Result<(), ClientError> {
             let ListResponse::Ok { timers } = resp;
             match timers
                 .iter()
-                .filter(|t| t.state == message::TimerStateClient::Running)
+                .filter(|t| t.state == message::TimerState::Running)
                 .min_by(|t1, t2| message::TimerInfo::cmp_by_next_due(t1, t2))
             {
                 Some(timer) => {
