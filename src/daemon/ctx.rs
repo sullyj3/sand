@@ -176,15 +176,21 @@ impl DaemonCtx {
     }
 
     pub async fn do_notification(&self, timer_id: TimerId) {
-        let initial_duration = match self.timers.entry(timer_id) {
+        let (initial_duration, message) = match self.timers.entry(timer_id) {
             dashmap::Entry::Vacant(_) => {
                 log::error!("Bug: do_notification called for nonexistent timer {timer_id}");
                 return;
             }
-            dashmap::Entry::Occupied(occupied_entry) => occupied_entry.get().initial_duration,
+            dashmap::Entry::Occupied(occupied_entry) => {
+                let timer = occupied_entry.get();
+                (timer.initial_duration, timer.message.clone())
+            }
         };
+
+        let summary: &str = message.as_deref().unwrap_or("Time's up!");
+
         let notification = Notification::new()
-            .summary("Time's up!")
+            .summary(summary)
             .body(&format!(
                 "Timer {timer_id} set for {} has elapsed",
                 initial_duration.format_colon_separated()
@@ -227,8 +233,13 @@ impl DaemonCtx {
         });
     }
 
-    pub async fn start_timer(&self, now: Instant, duration: Duration) -> TimerId {
-        let id = self._start_timer(now, duration);
+    pub async fn start_timer(
+        &self,
+        now: Instant,
+        duration: Duration,
+        message: Option<String>,
+    ) -> TimerId {
+        let id = self._start_timer(now, duration, message);
         log::info!(
             "Started timer {} for {}",
             id,
@@ -242,10 +253,10 @@ impl DaemonCtx {
     }
 
     /// Helper for start_timer() and again()
-    fn _start_timer(&self, now: Instant, duration: Duration) -> TimerId {
+    fn _start_timer(&self, now: Instant, duration: Duration, message: Option<String>) -> TimerId {
         let vacant = self.timers.first_vacant_entry();
         let id = *vacant.key();
-        vacant.insert(Timer::new_running(now, duration));
+        vacant.insert(Timer::new_running(now, duration, message));
         self.refresh_next_due.notify_one();
         id
     }
@@ -356,7 +367,13 @@ impl DaemonCtx {
         let last_started = { *self.last_started.read().await };
         match last_started {
             Some(duration) => {
-                let id = self._start_timer(now, duration);
+                let id = self._start_timer(
+                    now, duration,
+                    // TODO: we need to store all details about the most recently
+                    // started timer, (perhaps as another field in `Timers`) so
+                    // that `again` can re-use the same message
+                    None,
+                );
                 log::info!(
                     "Restarted most recent timer duration {} with new id {}",
                     duration.format_colon_separated(),

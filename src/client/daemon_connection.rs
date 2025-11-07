@@ -21,8 +21,12 @@ impl DaemonConnection {
         Ok(Self { read, write })
     }
 
-    pub fn add_timer(&mut self, duration: Duration) -> io::Result<StartTimerResponse> {
-        self.send(Command::StartTimer { duration })?;
+    pub fn add_timer(
+        &mut self,
+        duration: Duration,
+        message: Option<String>,
+    ) -> io::Result<StartTimerResponse> {
+        self.send(Command::StartTimer { duration, message })?;
         self.recv::<StartTimerResponse>()
     }
 

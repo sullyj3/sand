@@ -18,8 +18,8 @@ async fn handle_command(cmd: Command, ctx: &DaemonCtx) -> Response {
     let now = Instant::now();
     match cmd {
         Command::List => ListResponse::ok(ctx.get_timerinfo_for_client(now)).into(),
-        Command::StartTimer { duration } => {
-            StartTimerResponse::ok(ctx.start_timer(now, duration).await).into()
+        Command::StartTimer { duration, message } => {
+            StartTimerResponse::ok(ctx.start_timer(now, duration, message).await).into()
         }
         Command::PauseTimer(id) => ctx.pause_timer(id, now).into(),
         Command::ResumeTimer(id) => ctx.resume_timer(id, now).into(),

@@ -46,6 +46,10 @@ impl Cli {
 
 #[derive(Args, Clone)]
 pub struct StartArgs {
+    /// Message to display when the timer is done
+    #[arg(short, long)]
+    pub message: Option<String>,
+
     #[clap(name = "DURATION", value_parser = sand::duration::parse_duration_component, num_args = 1..)]
     pub durations: Vec<Duration>,
 }
