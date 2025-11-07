@@ -17,7 +17,6 @@ use crate::sand::timer::PausedTimer;
 use crate::sand::timer::RunningTimer;
 use crate::sand::timer::Timer;
 use crate::sand::timer::TimerId;
-use crate::sand::timer::TimerInfoForClient;
 use crate::sand::timer::TimerState;
 use crate::sand::timers::Timers;
 
@@ -71,7 +70,7 @@ async fn dbus_suspend_events() -> zbus::Result<impl Stream<Item = SuspendSignal>
 }
 
 impl DaemonCtx {
-    pub fn get_timerinfo_for_client(&self, now: Instant) -> Vec<TimerInfoForClient> {
+    pub fn get_timerinfo_for_client(&self, now: Instant) -> Vec<message::TimerInfoForClient> {
         self.timers.get_timerinfo_for_client(now)
     }
 

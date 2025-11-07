@@ -3,7 +3,7 @@ use std::time::{Duration, Instant};
 use dashmap::{DashMap, Entry, VacantEntry};
 use indoc::indoc;
 
-use crate::sand::timer::*;
+use crate::sand::{message::TimerInfoForClient, timer::*};
 
 // TODO: This doesn't really need to be a hashmap, since it's keyed by a newtype
 // on a u64. Should be some kind of vec probably. Slotmap doesn't work on its

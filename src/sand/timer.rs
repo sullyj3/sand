@@ -1,5 +1,4 @@
 use std::{
-    cmp::Ordering,
     fmt::Display,
     time::{Duration, Instant},
 };
@@ -63,46 +62,4 @@ pub enum TimerState {
     /// We keep timers after they've elapsed in this state to reserve the timer ID,
     /// allowing the user to restart them from the notification with the same ID.
     Elapsed,
-}
-
-#[derive(Debug, PartialEq, Serialize, Deserialize)]
-pub enum TimerStateClient {
-    Paused,
-    Running,
-    Elapsed,
-}
-
-// Given that Timer no longer contains a joinhandle, does this type still need
-// to exist?
-#[derive(Debug, PartialEq, Serialize, Deserialize)]
-pub struct TimerInfoForClient {
-    pub id: TimerId,
-    pub state: TimerStateClient,
-    pub remaining: Duration,
-}
-
-impl TimerInfoForClient {
-    pub fn new(id: TimerId, timer: &Timer, now: Instant) -> Self {
-        let (state, remaining) = match timer.state {
-            TimerState::Paused(PausedTimer { remaining }) => (TimerStateClient::Paused, remaining),
-            TimerState::Running(RunningTimer { due, .. }) => {
-                (TimerStateClient::Running, (due - now))
-            }
-            // TODO would be better to have a negative duration for this case
-            TimerState::Elapsed => (TimerStateClient::Elapsed, Duration::ZERO),
-        };
-        Self {
-            id,
-            state,
-            remaining,
-        }
-    }
-
-    pub fn cmp_by_next_due(t1: &Self, t2: &Self) -> Ordering {
-        t1.remaining.cmp(&t2.remaining)
-    }
-
-    pub fn cmp_by_id(t1: &Self, t2: &Self) -> Ordering {
-        t1.id.cmp(&t2.id)
-    }
 }

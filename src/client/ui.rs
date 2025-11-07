@@ -4,7 +4,7 @@ use crossterm::style::Stylize;
 
 use crate::sand::{
     duration::DurationExt,
-    timer::{TimerInfoForClient, TimerStateClient},
+    message::{TimerInfoForClient, TimerStateClient},
 };
 
 #[derive(Debug)]

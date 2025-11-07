@@ -1,9 +1,16 @@
-use std::time::Duration;
+use std::{
+    cmp::Ordering,
+    time::{Duration, Instant},
+};
 
 use derive_more::From;
 use serde::{Deserialize, Serialize};
 
 use crate::sand::timer::*;
+
+/////////////////////////////////////////////////////////////////////////////////////////
+// Commands
+/////////////////////////////////////////////////////////////////////////////////////////
 
 #[derive(Debug, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "lowercase")]
@@ -15,6 +22,10 @@ pub enum Command {
     CancelTimer(TimerId),
     Again,
 }
+
+/////////////////////////////////////////////////////////////////////////////////////////
+// Command responses
+/////////////////////////////////////////////////////////////////////////////////////////
 
 #[derive(Debug, PartialEq, Serialize, Deserialize)]
 #[serde(rename_all = "lowercase")]
@@ -83,6 +94,50 @@ pub enum Response {
 
     #[from(ignore)]
     Error(String),
+}
+
+/////////////////////////////////////////////////////////////////////////////////////////
+// Timers
+/////////////////////////////////////////////////////////////////////////////////////////
+
+#[derive(Debug, PartialEq, Serialize, Deserialize)]
+pub enum TimerStateClient {
+    Paused,
+    Running,
+    Elapsed,
+}
+
+#[derive(Debug, PartialEq, Serialize, Deserialize)]
+pub struct TimerInfoForClient {
+    pub id: TimerId,
+    pub state: TimerStateClient,
+    pub remaining: Duration,
+}
+
+impl TimerInfoForClient {
+    pub fn new(id: TimerId, timer: &Timer, now: Instant) -> Self {
+        let (state, remaining) = match timer.state {
+            TimerState::Paused(PausedTimer { remaining }) => (TimerStateClient::Paused, remaining),
+            TimerState::Running(RunningTimer { due, .. }) => {
+                (TimerStateClient::Running, (due - now))
+            }
+            // TODO would be better to have a negative duration for this case
+            TimerState::Elapsed => (TimerStateClient::Elapsed, Duration::ZERO),
+        };
+        Self {
+            id,
+            state,
+            remaining,
+        }
+    }
+
+    pub fn cmp_by_next_due(t1: &Self, t2: &Self) -> Ordering {
+        t1.remaining.cmp(&t2.remaining)
+    }
+
+    pub fn cmp_by_id(t1: &Self, t2: &Self) -> Ordering {
+        t1.id.cmp(&t2.id)
+    }
 }
 
 #[cfg(test)]
