@@ -30,10 +30,10 @@ pub enum Command {
 #[derive(Debug, PartialEq, Serialize, Deserialize)]
 #[serde(rename_all = "lowercase")]
 pub enum ListResponse {
-    Ok { timers: Vec<TimerInfoForClient> },
+    Ok { timers: Vec<TimerInfo> },
 }
 impl ListResponse {
-    pub fn ok(timers: Vec<TimerInfoForClient>) -> Self {
+    pub fn ok(timers: Vec<TimerInfo>) -> Self {
         Self::Ok { timers }
     }
 }
@@ -108,13 +108,13 @@ pub enum TimerStateClient {
 }
 
 #[derive(Debug, PartialEq, Serialize, Deserialize)]
-pub struct TimerInfoForClient {
+pub struct TimerInfo {
     pub id: TimerId,
     pub state: TimerStateClient,
     pub remaining: Duration,
 }
 
-impl TimerInfoForClient {
+impl TimerInfo {
     pub fn new(id: TimerId, timer: &Timer, now: Instant) -> Self {
         let (state, remaining) = match timer.state {
             TimerState::Paused(PausedTimer { remaining }) => (TimerStateClient::Paused, remaining),

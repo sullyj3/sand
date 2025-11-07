@@ -135,7 +135,7 @@ fn next_due(conn: &mut DaemonConnection) -> Result<(), ClientError> {
             match timers
                 .iter()
                 .filter(|t| t.state == message::TimerStateClient::Running)
-                .min_by(|t1, t2| message::TimerInfoForClient::cmp_by_next_due(t1, t2))
+                .min_by(|t1, t2| message::TimerInfo::cmp_by_next_due(t1, t2))
             {
                 Some(timer) => {
                     print!("{}", ui::next_due(timer));

@@ -3,7 +3,7 @@ use std::time::{Duration, Instant};
 use dashmap::{DashMap, Entry, VacantEntry};
 use indoc::indoc;
 
-use crate::sand::{message::TimerInfoForClient, timer::*};
+use crate::sand::{message::TimerInfo, timer::*};
 
 // TODO: This doesn't really need to be a hashmap, since it's keyed by a newtype
 // on a u64. Should be some kind of vec probably. Slotmap doesn't work on its
@@ -74,12 +74,12 @@ impl Timers {
             .min_by_key(|&(_, duration)| duration)
     }
 
-    pub fn get_timerinfo_for_client(&self, now: Instant) -> Vec<TimerInfoForClient> {
+    pub fn get_timerinfo_for_client(&self, now: Instant) -> Vec<TimerInfo> {
         self.0
             .iter()
             .map(|ref_multi| {
                 let (id, timer) = ref_multi.pair();
-                TimerInfoForClient::new(*id, timer, now)
+                TimerInfo::new(*id, timer, now)
             })
             .collect()
     }

@@ -70,7 +70,7 @@ async fn dbus_suspend_events() -> zbus::Result<impl Stream<Item = SuspendSignal>
 }
 
 impl DaemonCtx {
-    pub fn get_timerinfo_for_client(&self, now: Instant) -> Vec<message::TimerInfoForClient> {
+    pub fn get_timerinfo_for_client(&self, now: Instant) -> Vec<message::TimerInfo> {
         self.timers.get_timerinfo_for_client(now)
     }
 

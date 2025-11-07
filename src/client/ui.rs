@@ -4,7 +4,7 @@ use crossterm::style::Stylize;
 
 use crate::sand::{
     duration::DurationExt,
-    message::{TimerInfoForClient, TimerStateClient},
+    message::{TimerInfo, TimerStateClient},
 };
 
 #[derive(Debug)]
@@ -15,7 +15,7 @@ struct TableConfig<'a> {
     gap: &'a str,
 }
 
-pub fn ls(mut timers: Vec<TimerInfoForClient>) -> impl Display {
+pub fn ls(mut timers: Vec<TimerInfo>) -> impl Display {
     if timers.len() == 0 {
         return "There are currently no timers.\n".to_owned();
     };
@@ -23,8 +23,7 @@ pub fn ls(mut timers: Vec<TimerInfoForClient>) -> impl Display {
     // TODO sorting and partitioning maybe shouldn't be the UI's
     // responsibility. Move to caller
     timers.sort_by(|t1, t2| {
-        TimerInfoForClient::cmp_by_next_due(t1, t2)
-            .then_with(|| TimerInfoForClient::cmp_by_id(t1, t2))
+        TimerInfo::cmp_by_next_due(t1, t2).then_with(|| TimerInfo::cmp_by_id(t1, t2))
     });
     let (running, paused): (Vec<_>, Vec<_>) = timers
         .iter()
@@ -101,11 +100,7 @@ pub fn ls(mut timers: Vec<TimerInfoForClient>) -> impl Display {
     output
 }
 
-fn timers_table_row(
-    output: &mut impl Write,
-    timer_info: &TimerInfoForClient,
-    table_config: &TableConfig,
-) {
+fn timers_table_row(output: &mut impl Write, timer_info: &TimerInfo, table_config: &TableConfig) {
     let remaining: String = if let TimerStateClient::Elapsed = timer_info.state {
         "Elapsed".to_owned()
     } else {
@@ -130,7 +125,7 @@ fn timers_table_row(
     ).unwrap();
 }
 
-pub fn next_due(timer: &TimerInfoForClient) -> impl Display {
+pub fn next_due(timer: &TimerInfo) -> impl Display {
     format!(
         "Timer {}: {} left\n",
         timer.id,
