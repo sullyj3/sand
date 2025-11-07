@@ -3,7 +3,6 @@ mod ctx;
 mod handle_client;
 
 use indoc::indoc;
-use notify_rust::Notification;
 use std::env::VarError;
 use std::fmt::Display;
 use std::io;
@@ -17,18 +16,14 @@ use std::sync::Arc;
 use tokio;
 use tokio::sync::Notify;
 use tokio::sync::RwLock;
-use tokio::sync::mpsc;
 
 use crate::cli;
+use crate::daemon::audio::ElapsedSoundPlayer;
 use crate::sand::socket::env_sock_path;
-use crate::sand::timer::TimerId;
-use audio::ElapsedSoundPlayer;
 use ctx::DaemonCtx;
 use handle_client::handle_client;
 
 const SYSTEMD_SOCKFD: RawFd = 3;
-
-struct ElapsedEvent(TimerId);
 
 /////////////////////////////////////////////////////////////////////////////////////////
 // Setup
@@ -208,22 +203,25 @@ pub fn main(_args: cli::DaemonArgs) -> io::Result<()> {
     log_builder.init();
     log::info!("Starting sand daemon v{}", env!("CARGO_PKG_VERSION"));
 
-    // Channel for reporting elapsed timers
-    let (tx_elapsed_events, rx_elapsed_events) = mpsc::channel(20);
+    tokio::runtime::Runtime::new()?.block_on(daemon())
+}
+
+async fn daemon() -> io::Result<()> {
+    let elapsed_sound_player = ElapsedSoundPlayer::new()
+        .inspect(|_| log::debug!("ElapsedSoundPlayer successfully initialized."))
+        .inspect_err(|_| {
+            log::warn!(indoc! {"
+                Failed to initialize elapsed sound player.
+                There will be no timer sounds."})
+        })
+        .ok();
 
     let ctx = DaemonCtx {
         timers: Default::default(),
-        tx_elapsed_events,
         refresh_next_due: Arc::new(Notify::new()),
         last_started: Arc::new(RwLock::new(None)),
+        elapsed_sound_player,
     };
-
-    tokio::runtime::Runtime::new()?.block_on(daemon(ctx, rx_elapsed_events))
-}
-
-async fn daemon(ctx: DaemonCtx, rx_elapsed_events: mpsc::Receiver<ElapsedEvent>) -> io::Result<()> {
-    // Generate notifications and sounds for elapsed timers
-    tokio::spawn(notifier_thread(rx_elapsed_events));
 
     let c_ctx = ctx.clone();
     tokio::spawn(async move {
@@ -237,23 +235,6 @@ async fn daemon(ctx: DaemonCtx, rx_elapsed_events: mpsc::Receiver<ElapsedEvent>)
 /////////////////////////////////////////////////////////////////////////////////////////
 // Worker tasks
 /////////////////////////////////////////////////////////////////////////////////////////
-
-async fn notifier_thread(mut elapsed_events: mpsc::Receiver<ElapsedEvent>) -> ! {
-    let player = ElapsedSoundPlayer::new()
-        .inspect(|_| log::debug!("ElapsedSoundPlayer successfully initialized."))
-        .inspect_err(|_| {
-            log::warn!(indoc! {"
-                Failed to initialize elapsed sound player.
-                There will be no timer sounds."})
-        })
-        .ok();
-
-    while let Some(ElapsedEvent(timer_id)) = elapsed_events.recv().await {
-        let player = player.clone();
-        tokio::spawn(do_notification(player, timer_id));
-    }
-    unreachable!("bug: elapsed_events channel was closed.")
-}
 
 async fn client_accept_loop(listener: tokio::net::UnixListener, ctx: DaemonCtx) -> ! {
     log::info!("Daemon started.");
@@ -270,28 +251,5 @@ async fn client_accept_loop(listener: tokio::net::UnixListener, ctx: DaemonCtx) 
                 continue;
             }
         };
-    }
-}
-
-/////////////////////////////////////////////////////////////////////////////////////////
-// Helpers
-/////////////////////////////////////////////////////////////////////////////////////////
-
-pub async fn do_notification(player: Option<ElapsedSoundPlayer>, timer_id: TimerId) {
-    let notification = Notification::new()
-        .summary("Time's up!")
-        .body(&format!("Timer {timer_id} has elapsed"))
-        .icon("alarm")
-        .urgency(notify_rust::Urgency::Critical)
-        .show();
-    if let Err(e) = notification {
-        log::error!("Error showing desktop notification: {e}");
-    }
-
-    if let Some(ref player) = player {
-        log::debug!("playing sound");
-        player.play().await;
-    } else {
-        log::debug!("player is None - not playing sound");
     }
 }

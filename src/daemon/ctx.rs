@@ -4,13 +4,13 @@ use std::time::Instant;
 use std::time::SystemTime;
 
 use logind_zbus::manager::ManagerProxy;
+use notify_rust::Notification;
 use tokio::sync::Notify;
 use tokio::sync::RwLock;
-use tokio::sync::mpsc::Sender;
 use tokio_stream::Stream;
 use tokio_stream::StreamExt;
 
-use crate::daemon::ElapsedEvent;
+use crate::daemon::audio::ElapsedSoundPlayer;
 use crate::sand::duration::DurationExt;
 use crate::sand::message;
 use crate::sand::timer::PausedTimer;
@@ -18,15 +18,16 @@ use crate::sand::timer::RunningTimer;
 use crate::sand::timer::Timer;
 use crate::sand::timer::TimerId;
 use crate::sand::timer::TimerInfoForClient;
+use crate::sand::timer::TimerState;
 use crate::sand::timers::Timers;
 
 /// Should be cheap to clone.
 #[derive(Clone)]
 pub struct DaemonCtx {
     pub timers: Arc<Timers>,
-    pub tx_elapsed_events: Sender<ElapsedEvent>,
     pub refresh_next_due: Arc<Notify>,
     pub last_started: Arc<RwLock<Option<Duration>>>,
+    pub elapsed_sound_player: Option<ElapsedSoundPlayer>,
 }
 
 /// Used to pause the time keeping task during suspend
@@ -134,10 +135,10 @@ impl DaemonCtx {
 
         let elapsed_while_sleeping = self.timers.awaken(sleep_duration);
         for timer_id in elapsed_while_sleeping {
-            self.tx_elapsed_events
-                .send(ElapsedEvent(timer_id))
-                .await
-                .expect("elapsed event receiver was closed");
+            tokio::spawn({
+                let ctx = self.clone();
+                async move { ctx.do_notification(timer_id).await }
+            });
         }
         KeepTimeState::Awake
     }
@@ -162,15 +163,68 @@ impl DaemonCtx {
             Some(signal) = suspends_stream.next() =>
                 handle_suspend_signal_awake_state(signal),
             Some(timer_id) = next_countdown => {
-                self.tx_elapsed_events
-                    .send(ElapsedEvent(timer_id))
-                    .await
-                    .expect("elapsed event receiver was closed");
+                self.timers.set_elapsed(timer_id);
+                tokio::spawn({
+                    let ctx = self.clone();
+                    async move {
+                        ctx.do_notification(timer_id).await;
+                    }
+                });
                 log::info!("Timer {timer_id} completed");
-                self.timers.remove(&timer_id);
                 KeepTimeState::Awake
             }
         }
+    }
+
+    pub async fn do_notification(&self, timer_id: TimerId) {
+        let initial_duration = match self.timers.entry(timer_id) {
+            dashmap::Entry::Vacant(_) => {
+                log::error!("Bug: do_notification called for nonexistent timer {timer_id}");
+                return;
+            }
+            dashmap::Entry::Occupied(occupied_entry) => occupied_entry.get().initial_duration,
+        };
+        let notification = Notification::new()
+            .summary("Time's up!")
+            .body(&format!(
+                "Timer {timer_id} set for {} has elapsed",
+                initial_duration.format_colon_separated()
+            ))
+            .icon("alarm")
+            .urgency(notify_rust::Urgency::Critical)
+            .action("restart", "⟳ Restart")
+            .show_async()
+            .await;
+        let notification_handle = match notification {
+            Ok(notification) => notification,
+            Err(e) => {
+                log::error!("Error showing desktop notification: {e}");
+                return;
+            }
+        };
+
+        if let Some(ref player) = self.elapsed_sound_player {
+            log::debug!("playing sound");
+            player.play().await;
+        } else {
+            log::debug!("player is None - not playing sound");
+        }
+
+        notification_handle.wait_for_action(|s| match s {
+            "restart" => {
+                log::info!("Restarting timer {}", timer_id);
+                self.timers.restart(timer_id);
+                self.refresh_next_due.notify_one();
+            }
+            "__closed" => {
+                log::debug!("Notification for timer {timer_id} closed");
+                self.timers.remove(&timer_id);
+            }
+            _ => {
+                log::warn!("Unknown action from notification: {s}");
+                self.timers.remove(&timer_id);
+            }
+        });
     }
 
     pub async fn start_timer(&self, now: Instant, duration: Duration) -> TimerId {
@@ -191,10 +245,7 @@ impl DaemonCtx {
     fn _start_timer(&self, now: Instant, duration: Duration) -> TimerId {
         let vacant = self.timers.first_vacant_entry();
         let id = *vacant.key();
-
-        vacant.insert(Timer::Running(RunningTimer {
-            due: now + duration,
-        }));
+        vacant.insert(Timer::new_running(duration, now));
         self.refresh_next_due.notify_one();
         id
     }
@@ -208,11 +259,11 @@ impl DaemonCtx {
         };
         let timer = entry.get_mut();
 
-        use Timer as T;
-        match timer {
-            T::Running(RunningTimer { due }) => {
-                let remaining = *due - now;
-                *timer = T::Paused(PausedTimer { remaining });
+        use TimerState as TS;
+        match timer.state {
+            TS::Running(RunningTimer { due }) => {
+                let remaining = due - now;
+                timer.state = TS::Paused(PausedTimer { remaining });
                 self.refresh_next_due.notify_one();
                 log::info!(
                     "Paused timer {}, {} remaining",
@@ -221,9 +272,13 @@ impl DaemonCtx {
                 );
                 Resp::Ok
             }
-            T::Paused(_) => {
+            TS::Paused(_) => {
                 log::error!("Timer {} is already paused", id);
                 Resp::AlreadyPaused
+            }
+            TS::Elapsed => {
+                log::error!("Timer {} is already elapsed", id);
+                Resp::AlreadyElapsed
             }
         }
     }
@@ -237,23 +292,27 @@ impl DaemonCtx {
         };
         let timer = entry.get_mut();
 
-        use Timer as T;
-        match timer {
-            T::Paused(PausedTimer { remaining }) => {
+        use TimerState as TS;
+        match timer.state {
+            TS::Paused(PausedTimer { remaining }) => {
                 log::info!(
                     "Resumed timer {}, {} remaining",
                     id,
                     remaining.format_colon_separated()
                 );
-                *timer = T::Running(RunningTimer {
-                    due: now + *remaining,
+                timer.state = TS::Running(RunningTimer {
+                    due: now + remaining,
                 });
                 self.refresh_next_due.notify_one();
                 Resp::Ok
             }
-            T::Running(_) => {
+            TS::Running(_) => {
                 log::error!("Timer {} is already running", id);
                 Resp::AlreadyRunning
+            }
+            TS::Elapsed => {
+                log::error!("Timer {} is already elapsed", id);
+                Resp::AlreadyElapsed
             }
         }
     }
@@ -266,21 +325,25 @@ impl DaemonCtx {
             return Resp::TimerNotFound;
         };
         let timer = entry.get();
-        match timer {
-            Timer::Paused(PausedTimer { remaining }) => {
+        match timer.state {
+            TimerState::Paused(PausedTimer { remaining }) => {
                 log::info!(
                     "Cancelled paused timer {} with {} remaining",
                     id,
                     remaining.format_colon_separated()
                 );
             }
-            Timer::Running(RunningTimer { due }) => {
-                let remaining = *due - now;
+            TimerState::Running(RunningTimer { due }) => {
+                let remaining = due - now;
                 log::info!(
                     "Cancelled running timer {} with {} remaining",
                     id,
                     remaining.format_colon_separated()
                 );
+            }
+            TimerState::Elapsed => {
+                log::error!("Timer {} is already elapsed", id);
+                return Resp::AlreadyElapsed;
             }
         }
         entry.remove();

@@ -43,6 +43,7 @@ impl StartTimerResponse {
 pub enum CancelTimerResponse {
     Ok,
     TimerNotFound,
+    AlreadyElapsed,
 }
 
 #[derive(Debug, PartialEq, Serialize, Deserialize)]
@@ -51,6 +52,7 @@ pub enum PauseTimerResponse {
     Ok,
     TimerNotFound,
     AlreadyPaused,
+    AlreadyElapsed,
 }
 
 #[derive(Debug, PartialEq, Serialize, Deserialize)]
@@ -59,6 +61,7 @@ pub enum ResumeTimerResponse {
     Ok,
     TimerNotFound,
     AlreadyRunning,
+    AlreadyElapsed,
 }
 
 #[derive(Debug, PartialEq, Serialize, Deserialize)]

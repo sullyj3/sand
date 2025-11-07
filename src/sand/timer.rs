@@ -34,30 +34,62 @@ pub struct RunningTimer {
     pub due: Instant,
 }
 
+// TODO some of this is daemon-specific and should maybe go in
+// a daemon/timer.rs module
 #[derive(Debug)]
-pub enum Timer {
+pub struct Timer {
+    /// The initial duration of the timer. Should not be modified after creation.
+    pub initial_duration: Duration,
+    pub state: TimerState,
+}
+
+impl Timer {
+    pub fn new_running(initial_duration: Duration, now: Instant) -> Self {
+        Timer {
+            initial_duration,
+            state: TimerState::Running(RunningTimer {
+                due: now + initial_duration,
+            }),
+        }
+    }
+}
+
+// TODO some of this is daemon-specific and should maybe go in
+// a daemon/timer.rs module
+#[derive(Debug)]
+pub enum TimerState {
     Paused(PausedTimer),
     Running(RunningTimer),
+    /// We keep timers after they've elapsed in this state to reserve the timer ID,
+    /// allowing the user to restart them from the notification with the same ID.
+    Elapsed,
 }
 
 #[derive(Debug, PartialEq, Serialize, Deserialize)]
-pub enum TimerState {
+pub enum TimerStateClient {
     Paused,
     Running,
+    Elapsed,
 }
 
+// Given that Timer no longer contains a joinhandle, does this type still need
+// to exist?
 #[derive(Debug, PartialEq, Serialize, Deserialize)]
 pub struct TimerInfoForClient {
     pub id: TimerId,
-    pub state: TimerState,
+    pub state: TimerStateClient,
     pub remaining: Duration,
 }
 
 impl TimerInfoForClient {
     pub fn new(id: TimerId, timer: &Timer, now: Instant) -> Self {
-        let (state, remaining) = match timer {
-            Timer::Paused(PausedTimer { remaining }) => (TimerState::Paused, *remaining),
-            Timer::Running(RunningTimer { due, .. }) => (TimerState::Running, (*due - now)),
+        let (state, remaining) = match timer.state {
+            TimerState::Paused(PausedTimer { remaining }) => (TimerStateClient::Paused, remaining),
+            TimerState::Running(RunningTimer { due, .. }) => {
+                (TimerStateClient::Running, (due - now))
+            }
+            // TODO would be better to have a negative duration for this case
+            TimerState::Elapsed => (TimerStateClient::Elapsed, Duration::ZERO),
         };
         Self {
             id,
