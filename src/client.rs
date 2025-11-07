@@ -13,7 +13,7 @@ use crate::sand::cli::StartArgs;
 use crate::sand::duration::DurationExt;
 use crate::sand::message::*;
 use crate::sand::socket;
-use crate::sand::timer::{TimerId, TimerInfoForClient, TimerState};
+use crate::sand::timer::{TimerId, TimerInfoForClient, TimerStateClient};
 
 #[derive(Debug)]
 enum ClientError {
@@ -134,7 +134,7 @@ fn next_due(conn: &mut DaemonConnection) -> Result<(), ClientError> {
             let ListResponse::Ok { timers } = resp;
             match timers
                 .iter()
-                .filter(|t| t.state == TimerState::Running)
+                .filter(|t| t.state == TimerStateClient::Running)
                 .min_by(|t1, t2| TimerInfoForClient::cmp_by_next_due(t1, t2))
             {
                 Some(timer) => {

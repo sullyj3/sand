@@ -44,7 +44,7 @@ pub enum Timer {
 }
 
 #[derive(Debug, PartialEq, Serialize, Deserialize)]
-pub enum TimerState {
+pub enum TimerStateClient {
     Paused,
     Running,
     Elapsed,
@@ -55,17 +55,17 @@ pub enum TimerState {
 #[derive(Debug, PartialEq, Serialize, Deserialize)]
 pub struct TimerInfoForClient {
     pub id: TimerId,
-    pub state: TimerState,
+    pub state: TimerStateClient,
     pub remaining: Duration,
 }
 
 impl TimerInfoForClient {
     pub fn new(id: TimerId, timer: &Timer, now: Instant) -> Self {
         let (state, remaining) = match timer {
-            Timer::Paused(PausedTimer { remaining }) => (TimerState::Paused, *remaining),
-            Timer::Running(RunningTimer { due, .. }) => (TimerState::Running, (*due - now)),
+            Timer::Paused(PausedTimer { remaining }) => (TimerStateClient::Paused, *remaining),
+            Timer::Running(RunningTimer { due, .. }) => (TimerStateClient::Running, (*due - now)),
             // TODO would be better to have a negative duration for this case
-            Timer::Elapsed => (TimerState::Elapsed, Duration::ZERO),
+            Timer::Elapsed => (TimerStateClient::Elapsed, Duration::ZERO),
         };
         Self {
             id,
