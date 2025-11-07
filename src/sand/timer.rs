@@ -43,7 +43,7 @@ pub struct Timer {
 }
 
 impl Timer {
-    pub fn new_running(initial_duration: Duration, now: Instant) -> Self {
+    pub fn new_running(now: Instant, initial_duration: Duration) -> Self {
         Timer {
             initial_duration,
             state: TimerState::Running(RunningTimer {

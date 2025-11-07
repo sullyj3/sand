@@ -244,7 +244,7 @@ impl DaemonCtx {
     fn _start_timer(&self, now: Instant, duration: Duration) -> TimerId {
         let vacant = self.timers.first_vacant_entry();
         let id = *vacant.key();
-        vacant.insert(Timer::new_running(duration, now));
+        vacant.insert(Timer::new_running(now, duration));
         self.refresh_next_due.notify_one();
         id
     }
