@@ -198,6 +198,7 @@ impl DaemonCtx {
             Ok(notification) => notification,
             Err(e) => {
                 log::error!("Error showing desktop notification: {e}");
+                self.timers.remove(&timer_id);
                 return;
             }
         };
