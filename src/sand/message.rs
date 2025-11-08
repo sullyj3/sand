@@ -16,7 +16,10 @@ use crate::sand::timer::{self, PausedTimer, RunningTimer, Timer, TimerId};
 #[serde(rename_all = "lowercase")]
 pub enum Command {
     List,
-    StartTimer { duration: Duration },
+    StartTimer {
+        duration: Duration,
+        message: Option<String>,
+    },
     PauseTimer(TimerId),
     ResumeTimer(TimerId),
     CancelTimer(TimerId),
@@ -112,6 +115,7 @@ pub struct TimerInfo {
     pub id: TimerId,
     pub state: TimerState,
     pub remaining: Duration,
+    pub message: Option<String>,
 }
 
 impl TimerInfo {
@@ -128,6 +132,7 @@ impl TimerInfo {
             id,
             state,
             remaining,
+            message: timer.message.clone(),
         }
     }
 

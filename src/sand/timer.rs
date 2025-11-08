@@ -39,13 +39,15 @@ pub struct RunningTimer {
 pub struct Timer {
     /// The initial duration of the timer. Should not be modified after creation.
     pub initial_duration: Duration,
+    pub message: Option<String>,
     pub state: TimerState,
 }
 
 impl Timer {
-    pub fn new_running(now: Instant, initial_duration: Duration) -> Self {
+    pub fn new_running(now: Instant, initial_duration: Duration, message: Option<String>) -> Self {
         Timer {
             initial_duration,
+            message,
             state: TimerState::Running(RunningTimer {
                 due: now + initial_duration,
             }),

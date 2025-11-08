@@ -12,9 +12,11 @@ struct TableConfig<'a> {
     status_column_width: usize,
     id_column_width: usize,
     remaining_column_width: usize,
+    message_column_width: usize,
     gap: &'a str,
 }
 
+// TODO this needs a complete rework
 pub fn ls(mut timers: Vec<TimerInfo>) -> impl Display {
     if timers.len() == 0 {
         return "There are currently no timers.\n".to_owned();
@@ -61,11 +63,22 @@ pub fn ls(mut timers: Vec<TimerInfo>) -> impl Display {
         widest_remaining_duration.max(remaining_header.len())
     };
 
+    let message_header = "Message";
+    let message_column_width = {
+        let widest_message = timers
+            .iter()
+            .map(|ti| ti.message.as_ref().map(|s| s.len()).unwrap_or(0))
+            .max()
+            .expect("timers.len() != 0");
+        widest_message.max(message_header.len())
+    };
+
     let gap = "  ";
     let table_config = TableConfig {
         status_column_width,
         id_column_width,
         remaining_column_width,
+        message_column_width,
         gap,
     };
 
@@ -73,13 +86,15 @@ pub fn ls(mut timers: Vec<TimerInfo>) -> impl Display {
     // so we have to pre-pad
     let id_header_padded = format!("{:<id_column_width$}", id_header);
     let remaining_header_padded = format!("{:<remaining_column_width$}", remaining_header);
+    let message_header_padded = format!("{:<message_column_width$}", message_header);
 
     // Header
     write!(
         output,
-        "{status_header}{gap}{}{gap}{}\n",
+        "{status_header}{gap}{}{gap}{}{gap}{}\n",
         id_header_padded.underlined(),
         remaining_header_padded.underlined(),
+        message_header_padded.underlined(),
     )
     .unwrap();
 
@@ -116,10 +131,12 @@ fn timers_table_row(output: &mut impl Write, timer_info: &TimerInfo, table_confi
         status_column_width,
         id_column_width,
         remaining_column_width,
+        message_column_width,
         gap,
     } = table_config;
+    let message: &str = timer_info.message.as_deref().unwrap_or("");
     write!(output,
-        "{play_pause:>status_column_width$}{gap}{:>id_column_width$}{gap}{remaining:>remaining_column_width$}\n",
+        "{play_pause:>status_column_width$}{gap}{:>id_column_width$}{gap}{remaining:>remaining_column_width$}{gap}{message:<message_column_width$}\n",
         // need the string conversion first for the padding to work
         id.to_string(),
     ).unwrap();

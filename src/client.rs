@@ -97,8 +97,8 @@ pub fn main(cli_cmd: cli::ClientCommand) -> io::Result<()> {
 
     // TODO: support passing multiple IDs in protocol
     let result: ClientResult<()> = match cli_cmd {
-        cli::ClientCommand::Start(StartArgs { durations }) => {
-            start(&mut conn, durations).inspect_err(|err| eprintln!("{err}"))
+        cli::ClientCommand::Start(StartArgs { durations, message }) => {
+            start(&mut conn, durations, message).inspect_err(|err| eprintln!("{err}"))
         }
         cli::ClientCommand::NextDue => next_due(&mut conn).inspect_err(|err| eprintln!("{err}")),
         cli::ClientCommand::Ls => ls(&mut conn),
@@ -119,9 +119,13 @@ pub fn main(cli_cmd: cli::ClientCommand) -> io::Result<()> {
 // Command handler functions
 /////////////////////////////////////////////////////////////////////////////////////////
 
-fn start(conn: &mut DaemonConnection, durations: Vec<Duration>) -> ClientResult<()> {
+fn start(
+    conn: &mut DaemonConnection,
+    durations: Vec<Duration>,
+    message: Option<String>,
+) -> ClientResult<()> {
     let dur: Duration = durations.iter().sum();
-    let StartTimerResponse::Ok { id } = conn.add_timer(dur)?;
+    let StartTimerResponse::Ok { id } = conn.add_timer(dur, message)?;
 
     let dur_string = dur.format_colon_separated();
     println!("Timer {id} created for {dur_string}.");

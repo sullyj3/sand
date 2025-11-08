@@ -155,6 +155,36 @@ class TestDaemon:
         diff = DeepDiff(expected, response, ignore_order=True)
         assert not diff, f"Response shape mismatch:\n{pformat(diff)}"
 
+    def test_add_with_message(self, daemon):
+        msg_and_response(
+            {
+                "starttimer": {
+                    "duration": {"secs": 10 * 60, "nanos": 0},
+                    "message": "Hello, world!",
+                }
+            }
+        )
+        response = msg_and_response("list")
+        expected_shape = {
+            "ok": {
+                "timers": [
+                    {
+                        "id": 1,
+                        "message": "Hello, world!",
+                        "state": "Running",
+                        "remaining": None,
+                    },
+                ]
+            }
+        }
+        diff = DeepDiff(
+            expected_shape,
+            response,
+            exclude_regex_paths=IGNORE_REMAINING,
+            ignore_order=True,
+        )
+        assert not diff, f"Response shape mismatch:\n{pformat(diff)}"
+
     def test_list(self, daemon):
         msg_and_response({"starttimer": {"duration": {"secs": 10 * 60, "nanos": 0}}})
         msg_and_response({"starttimer": {"duration": {"secs": 20 * 60, "nanos": 0}}})
@@ -164,8 +194,8 @@ class TestDaemon:
         expected_shape = {
             "ok": {
                 "timers": [
-                    {"id": 2, "state": "Running", "remaining": None},
-                    {"id": 1, "state": "Running", "remaining": None},
+                    {"id": 2, "message": None, "state": "Running", "remaining": None},
+                    {"id": 1, "message": None, "state": "Running", "remaining": None},
                 ]
             }
         }
@@ -184,7 +214,11 @@ class TestDaemon:
 
         response = msg_and_response("list")
         expected_shape = {
-            "ok": {"timers": [{"id": 1, "state": "Paused", "remaining": None}]}
+            "ok": {
+                "timers": [
+                    {"id": 1, "message": None, "state": "Paused", "remaining": None}
+                ]
+            }
         }
         diff = DeepDiff(
             expected_shape,
@@ -198,7 +232,11 @@ class TestDaemon:
 
         response = msg_and_response("list")
         expected_shape = {
-            "ok": {"timers": [{"id": 1, "state": "Running", "remaining": None}]}
+            "ok": {
+                "timers": [
+                    {"id": 1, "message": None, "state": "Running", "remaining": None}
+                ]
+            }
         }
         diff = DeepDiff(
             expected_shape,
@@ -223,7 +261,11 @@ class TestDaemon:
 
         response = msg_and_response("list")
         expected_shape = {
-            "ok": {"timers": [{"id": 1, "state": "Paused", "remaining": None}]}
+            "ok": {
+                "timers": [
+                    {"id": 1, "message": None, "state": "Paused", "remaining": None}
+                ]
+            }
         }
         diff = DeepDiff(
             expected_shape,
