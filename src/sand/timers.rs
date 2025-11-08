@@ -54,10 +54,9 @@ impl Timers {
         }
     }
 
-    // TODO is there any good reason for this to take id by reference?
-    pub fn remove(&self, id: &TimerId) {
+    pub fn remove(&self, id: TimerId) {
         log::debug!("Removing timer {id}");
-        self.0.remove(id);
+        self.0.remove(&id);
     }
 
     pub fn next_due_running(&self) -> Option<(TimerId, Duration)> {

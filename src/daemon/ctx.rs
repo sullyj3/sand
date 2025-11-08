@@ -198,7 +198,7 @@ impl DaemonCtx {
             Ok(notification) => notification,
             Err(e) => {
                 log::error!("Error showing desktop notification: {e}");
-                self.timers.remove(&timer_id);
+                self.timers.remove(timer_id);
                 return;
             }
         };
@@ -218,11 +218,11 @@ impl DaemonCtx {
             }
             "__closed" => {
                 log::debug!("Notification for timer {timer_id} closed");
-                self.timers.remove(&timer_id);
+                self.timers.remove(timer_id);
             }
             _ => {
                 log::warn!("Unknown action from notification: {s}");
-                self.timers.remove(&timer_id);
+                self.timers.remove(timer_id);
             }
         });
     }
