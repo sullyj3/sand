@@ -208,12 +208,14 @@ impl DaemonCtx {
             }
         };
 
-        if let Some(ref player) = self.elapsed_sound_player {
+        let _looped_playback = if let Some(ref player) = self.elapsed_sound_player {
             log::debug!("playing sound");
-            player.play().await;
+            // player.play().await;
+            Some(player.play_looped().await)
         } else {
             log::debug!("player is None - not playing sound");
-        }
+            None
+        };
 
         notification_handle.wait_for_action(|s| match s {
             "restart" => {
