@@ -225,7 +225,7 @@ impl ElapsedSoundPlayer {
             .inspect_err(|e| log::debug!("{e}"))?;
         let sound = load_elapsed_sound().inspect_err(|e| log::warn!("{e}"))?;
         let sound = Arc::new(RwLock::new(sound));
-        tokio::spawn(refresh_when_changed(sound.clone()));
+        tokio::spawn(refresh_sound_when_changed(sound.clone()));
 
         let player = Self {
             sound: sound,
@@ -240,14 +240,14 @@ impl ElapsedSoundPlayer {
     }
 }
 
-pub async fn refresh_sound(sound: &RwLock<Sound>) -> Result<(), ElapsedSoundPlayerError> {
+async fn refresh_sound(sound: &RwLock<Sound>) -> Result<(), ElapsedSoundPlayerError> {
     log::info!("Refreshing sound.");
     let new_sound = load_elapsed_sound()?;
     *sound.write().await = new_sound;
     Ok(())
 }
 
-pub async fn refresh_when_changed(sound: Arc<RwLock<Sound>>) {
+async fn refresh_sound_when_changed(sound: Arc<RwLock<Sound>>) {
     let data_dir: PathBuf = match sand_user_data_dir() {
         Ok(p) => p,
         Err(err) => {
