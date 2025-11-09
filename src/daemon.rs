@@ -216,16 +216,18 @@ async fn daemon() -> io::Result<()> {
         })
         .ok();
 
-    let ctx = DaemonCtx {
+    let ctx = Arc::new(DaemonCtx {
         timers: Default::default(),
-        refresh_next_due: Arc::new(Notify::new()),
-        last_started: Arc::new(RwLock::new(None)),
+        refresh_next_due: Notify::new(),
+        last_started: RwLock::new(None),
         elapsed_sound_player,
-    };
+    });
 
-    let c_ctx = ctx.clone();
-    tokio::spawn(async move {
-        c_ctx.keep_time().await;
+    tokio::spawn({
+        let ctx = ctx.clone();
+        async move {
+            ctx.keep_time().await;
+        }
     });
 
     let unix_listener: tokio::net::UnixListener = get_socket()?;
@@ -236,7 +238,7 @@ async fn daemon() -> io::Result<()> {
 // Worker tasks
 /////////////////////////////////////////////////////////////////////////////////////////
 
-async fn client_accept_loop(listener: tokio::net::UnixListener, ctx: DaemonCtx) -> ! {
+async fn client_accept_loop(listener: tokio::net::UnixListener, ctx: Arc<DaemonCtx>) -> ! {
     log::info!("Daemon started.");
     log::info!("Starting accept loop");
     loop {

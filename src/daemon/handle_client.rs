@@ -1,3 +1,4 @@
+use std::sync::Arc;
 use std::time::Instant;
 
 use crate::sand::message::ListResponse;
@@ -28,7 +29,7 @@ async fn handle_command(cmd: Command, ctx: &DaemonCtx) -> Response {
     }
 }
 
-pub async fn handle_client(mut stream: UnixStream, state: DaemonCtx) {
+pub async fn handle_client(mut stream: UnixStream, state: Arc<DaemonCtx>) {
     log::trace!("Handling client.");
 
     let (read_half, mut write_half) = stream.split();
