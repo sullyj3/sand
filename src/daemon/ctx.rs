@@ -20,12 +20,10 @@ use crate::sand::timer::TimerId;
 use crate::sand::timer::TimerState;
 use crate::sand::timers::Timers;
 
-/// Should be cheap to clone.
-#[derive(Clone)]
 pub struct DaemonCtx {
-    pub timers: Arc<Timers>,
-    pub refresh_next_due: Arc<Notify>,
-    pub last_started: Arc<RwLock<Option<Duration>>>,
+    pub timers: Timers,
+    pub refresh_next_due: Notify,
+    pub last_started: RwLock<Option<Duration>>,
     pub elapsed_sound_player: Option<ElapsedSoundPlayer>,
 }
 
@@ -79,7 +77,7 @@ impl DaemonCtx {
     /// handles:
     /// - counting down timers
     /// - system sleep and wake
-    pub async fn keep_time(&self) -> ! {
+    pub async fn keep_time(self: Arc<Self>) -> ! {
         let mut state = KeepTimeState::Awake;
         let suspends_stream = dbus_suspend_events().await.unwrap_or_else(|err| {
             log::error!("Unable to receive D-Bus suspend events: {}", err);
@@ -90,16 +88,17 @@ impl DaemonCtx {
         loop {
             state = match state {
                 KeepTimeState::Asleep { slept_at } => {
-                    self.handle_asleep_state(&mut suspends_stream, slept_at)
+                    self.clone()
+                        .handle_asleep_state(&mut suspends_stream, slept_at)
                         .await
                 }
-                KeepTimeState::Awake => self.handle_awake_state(&mut suspends_stream).await,
+                KeepTimeState::Awake => self.clone().handle_awake_state(&mut suspends_stream).await,
             };
         }
     }
 
     async fn handle_asleep_state<S>(
-        &self,
+        self: Arc<Self>,
         suspends_stream: &mut S,
         slept_at: SystemTime,
     ) -> KeepTimeState
@@ -142,7 +141,7 @@ impl DaemonCtx {
         KeepTimeState::Awake
     }
 
-    async fn handle_awake_state<S>(&self, suspends_stream: &mut S) -> KeepTimeState
+    async fn handle_awake_state<S>(self: Arc<Self>, suspends_stream: &mut S) -> KeepTimeState
     where
         S: Stream<Item = SuspendSignal> + Unpin,
     {
