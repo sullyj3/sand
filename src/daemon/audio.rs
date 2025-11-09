@@ -1,17 +1,16 @@
 use std::ffi::OsStr;
 use std::fmt::Debug;
 use std::fmt::{self, Display, Formatter};
-use std::fs::File;
-use std::io::{self, ErrorKind};
+use std::io::{self, Cursor, ErrorKind, Read};
 use std::path::{Path, PathBuf};
-use std::sync::Arc;
+use std::sync::{Arc, Weak};
 
 use indoc::indoc;
 use notify::{RecursiveMode, Watcher as _};
 use rodio::decoder::LoopedDecoder;
 use rodio::source::Buffered;
-use rodio::{Decoder, OutputStream, Source};
-use tokio::sync::RwLock;
+use rodio::{Decoder, OutputStream, Sink, Source};
+use tokio::sync::{Mutex, MutexGuard, RwLock};
 use tokio_stream::StreamExt as _;
 use tokio_stream::wrappers::ReceiverStream;
 
@@ -56,21 +55,27 @@ impl From<io::Error> for SoundLoadError {
 type SoundLoadResult<T> = Result<T, SoundLoadError>;
 
 // type Sound = Buffered<Decoder<BufReader<File>>>;
-type LoopedSound = Buffered<LoopedDecoder<File>>;
+type LoopedSound = Buffered<LoopedDecoder<Cursor<Vec<u8>>>>;
 
 fn load_sound(path: &Path) -> SoundLoadResult<LoopedSound> {
-    use std::fs::File;
-    let file = File::open(path)?;
-    log::debug!(
-        "Found sound file at {}, attempting to load",
-        path.to_string_lossy()
-    );
+    let buf = {
+        use std::fs::File;
+        let mut file = File::open(path)?;
+        log::debug!(
+            "Found sound file at {}, attempting to load",
+            path.to_string_lossy()
+        );
+        let mut buf = Vec::with_capacity(1_000_000);
+        file.read_to_end(&mut buf)?;
+        buf
+    };
+    let cursor = Cursor::new(buf);
     let decoder =
-        Decoder::new_looped(file).map_err(|err| SoundLoadError::DecoderError(err.to_string()))?;
+        Decoder::new_looped(cursor).map_err(|err| SoundLoadError::DecoderError(err.to_string()))?;
     // let decoder =
     //     Decoder::try_from(file).map_err(|err| SoundLoadError::DecoderError(err.to_string()))?;
-    let buf = decoder.buffered();
-    Ok(buf)
+    let buffered = decoder.buffered();
+    Ok(buffered)
 }
 
 const SOUND_FILENAME: &str = "timer_sound";
@@ -217,9 +222,20 @@ impl Display for ElapsedSoundPlayerError {
     }
 }
 
+/// While any task holds one of these handles, the sound will continue to loop.
+/// Once all handles are dropped, the sound will stop playing.
+/// Only one instance of the sound will play at a time.
+#[must_use]
+pub struct LoopedSoundPlayback(
+    // This field is not supposed to be accessed, we use its Drop for side
+    // effects
+    #[allow(dead_code)] Arc<Sink>,
+);
+
 pub struct ElapsedSoundPlayer {
     sound: Arc<RwLock<LoopedSound>>,
     output_stream: OutputStream,
+    sink: Mutex<Weak<Sink>>,
 }
 
 impl ElapsedSoundPlayer {
@@ -233,6 +249,7 @@ impl ElapsedSoundPlayer {
         let player = Self {
             sound: sound,
             output_stream: stream,
+            sink: Mutex::new(Weak::new()),
         };
         Ok(player)
     }
@@ -240,6 +257,27 @@ impl ElapsedSoundPlayer {
     pub async fn play(&self) {
         let s = self.sound.read().await.clone();
         self.output_stream.mixer().add(s);
+    }
+
+    pub async fn play_looped(&self) -> LoopedSoundPlayback {
+        let sink_lock = self.sink.lock().await;
+        match sink_lock.upgrade() {
+            Some(sink) => LoopedSoundPlayback(sink),
+            None => {
+                let sink = self.new_elapsed_sound_sink(sink_lock).await;
+                LoopedSoundPlayback(sink)
+            }
+        }
+    }
+
+    async fn new_elapsed_sound_sink(&self, mut lock: MutexGuard<'_, Weak<Sink>>) -> Arc<Sink> {
+        let mixer = self.output_stream.mixer();
+        let sink = Sink::connect_new(mixer);
+        let sound = self.sound.read().await.clone();
+        sink.append(sound);
+        let arc = Arc::new(sink);
+        *lock = Arc::downgrade(&arc);
+        arc
     }
 }
 
