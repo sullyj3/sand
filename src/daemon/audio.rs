@@ -213,10 +213,9 @@ impl Display for ElapsedSoundPlayerError {
     }
 }
 
-#[derive(Clone)]
 pub struct ElapsedSoundPlayer {
     sound: Arc<RwLock<Sound>>,
-    output_stream: Arc<OutputStream>,
+    output_stream: OutputStream,
 }
 
 impl ElapsedSoundPlayer {
@@ -229,7 +228,7 @@ impl ElapsedSoundPlayer {
 
         let player = Self {
             sound: sound,
-            output_stream: Arc::new(stream),
+            output_stream: stream,
         };
         Ok(player)
     }
