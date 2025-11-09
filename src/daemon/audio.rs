@@ -240,13 +240,6 @@ impl ElapsedSoundPlayer {
         Ok(player)
     }
 
-    pub async fn refresh_sound(&self) -> Result<(), ElapsedSoundPlayerError> {
-        log::info!("Refreshing sound.");
-        let new_sound = load_elapsed_sound()?;
-        *self.sound.write().await = new_sound;
-        Ok(())
-    }
-
     pub async fn refresh_when_changed(&self) {
         let data_dir: PathBuf = match sand_user_data_dir() {
             Ok(p) => p,
@@ -299,7 +292,7 @@ impl ElapsedSoundPlayer {
 
         log::debug!("User sound file watcher started.");
         while let Some(_event) = stream.next().await {
-            if let Err(e) = self.refresh_sound().await {
+            if let Err(e) = refresh_sound(&self.sound).await {
                 log::warn!("{e}");
             }
         }
@@ -310,4 +303,11 @@ impl ElapsedSoundPlayer {
         let s = self.sound.read().await.clone();
         self.output_stream.mixer().add(s);
     }
+}
+
+pub async fn refresh_sound(sound: &RwLock<Sound>) -> Result<(), ElapsedSoundPlayerError> {
+    log::info!("Refreshing sound.");
+    let new_sound = load_elapsed_sound()?;
+    *sound.write().await = new_sound;
+    Ok(())
 }
