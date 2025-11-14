@@ -5,6 +5,7 @@ use std::time::SystemTime;
 
 use logind_zbus::manager::ManagerProxy;
 use notify_rust::Notification;
+use notify_rust::Timeout;
 use tokio::sync::Notify;
 use tokio::sync::RwLock;
 use tokio_stream::Stream;
@@ -197,6 +198,7 @@ impl DaemonCtx {
             .icon("alarm")
             .urgency(notify_rust::Urgency::Critical)
             .action("restart", "⟳ Restart")
+            .timeout(Timeout::Never)
             .show_async()
             .await;
         let notification_handle = match notification {
