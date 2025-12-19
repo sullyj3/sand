@@ -239,6 +239,15 @@ pub struct LoopedSoundPlayback(
     #[allow(dead_code)] Arc<Sink>,
 );
 
+/// The result of a call to ElapsedSoundPlayer::play()
+/// if the daemon was started in oneshot mode, it will return OneShot, which can
+/// be discarded. If the daemon was started in looped mode, it will return a
+/// LoopedSoundPlayback, which should be held until the caller wants to stop the sound.
+pub enum Playback {
+    OneShot,
+    Looped(#[allow(dead_code)] LoopedSoundPlayback),
+}
+
 pub struct ElapsedSoundPlayer {
     sound: Arc<RwLock<Sound>>,
     output_stream: OutputStream,
@@ -261,34 +270,36 @@ impl ElapsedSoundPlayer {
         Ok(player)
     }
 
-    pub async fn play(&self) {
+    pub async fn play(&self) -> Playback {
         let s = self.sound.read().await.clone();
-        // TODO there's got to be a better way to do this
         match s {
-            Sound::OneShot(buffered) => self.output_stream.mixer().add(buffered),
-            Sound::Looped(buffered) => self.output_stream.mixer().add(buffered),
+            Sound::OneShot(buffered) => {
+                self.output_stream.mixer().add(buffered);
+                Playback::OneShot
+            }
+            Sound::Looped(buffered) => Playback::Looped(self.play_looped(buffered).await),
         }
     }
 
-    pub async fn play_looped(&self) -> LoopedSoundPlayback {
+    async fn play_looped(&self, sound: LoopedSound) -> LoopedSoundPlayback {
         let sink_lock = self.sink.lock().await;
         match sink_lock.upgrade() {
             Some(sink) => LoopedSoundPlayback(sink),
             None => {
-                let sink = self.new_elapsed_sound_sink(sink_lock).await;
+                let sink = self.new_looped_elapsed_sound_sink(sink_lock, sound).await;
                 LoopedSoundPlayback(sink)
             }
         }
     }
 
-    async fn new_elapsed_sound_sink(&self, mut lock: MutexGuard<'_, Weak<Sink>>) -> Arc<Sink> {
+    async fn new_looped_elapsed_sound_sink(
+        &self,
+        mut lock: MutexGuard<'_, Weak<Sink>>,
+        sound: LoopedSound,
+    ) -> Arc<Sink> {
         let mixer = self.output_stream.mixer();
         let sink = Sink::connect_new(mixer);
-        let sound = self.sound.read().await.clone();
-        match sound {
-            Sound::OneShot(buffered) => sink.append(buffered),
-            Sound::Looped(buffered) => sink.append(buffered),
-        }
+        sink.append(sound);
         let arc = Arc::new(sink);
         *lock = Arc::downgrade(&arc);
         arc
