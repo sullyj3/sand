@@ -2,15 +2,16 @@ use std::ffi::OsStr;
 use std::fmt::Debug;
 use std::fmt::{self, Display, Formatter};
 use std::fs::File;
-use std::io::{self, BufReader, ErrorKind};
+use std::io::{self, BufReader, Cursor, ErrorKind, Read};
 use std::path::{Path, PathBuf};
-use std::sync::Arc;
+use std::sync::{Arc, Weak};
 
 use indoc::indoc;
 use notify::{RecursiveMode, Watcher as _};
+use rodio::decoder::LoopedDecoder;
 use rodio::source::Buffered;
-use rodio::{Decoder, OutputStream, Source};
-use tokio::sync::RwLock;
+use rodio::{Decoder, OutputStream, Sink, Source};
+use tokio::sync::{Mutex, MutexGuard, RwLock};
 use tokio_stream::StreamExt as _;
 use tokio_stream::wrappers::ReceiverStream;
 
@@ -54,19 +55,34 @@ impl From<io::Error> for SoundLoadError {
 
 type SoundLoadResult<T> = Result<T, SoundLoadError>;
 
-type Sound = Buffered<Decoder<BufReader<File>>>;
+type OneShotSound = Buffered<Decoder<BufReader<File>>>;
+type LoopedSound = Buffered<LoopedDecoder<Cursor<Vec<u8>>>>;
+
+#[derive(Clone)]
+enum Sound {
+    OneShot(OneShotSound),
+    Looped(LoopedSound),
+}
 
 fn load_sound(path: &Path) -> SoundLoadResult<Sound> {
-    use std::fs::File;
-    let file = File::open(path)?;
-    log::debug!(
-        "Found sound file at {}, attempting to load",
-        path.to_string_lossy()
-    );
+    let buf = {
+        use std::fs::File;
+        let mut file = File::open(path)?;
+        log::debug!(
+            "Found sound file at {}, attempting to load",
+            path.to_string_lossy()
+        );
+        let mut buf = Vec::with_capacity(1_000_000);
+        file.read_to_end(&mut buf)?;
+        buf
+    };
+    let cursor = Cursor::new(buf);
     let decoder =
-        Decoder::try_from(file).map_err(|err| SoundLoadError::DecoderError(err.to_string()))?;
-    let buf = decoder.buffered();
-    Ok(buf)
+        Decoder::new_looped(cursor).map_err(|err| SoundLoadError::DecoderError(err.to_string()))?;
+    // let decoder =
+    //     Decoder::try_from(file).map_err(|err| SoundLoadError::DecoderError(err.to_string()))?;
+    let buffered = decoder.buffered();
+    Ok(Sound::Looped(buffered))
 }
 
 const SOUND_FILENAME: &str = "timer_sound";
@@ -213,9 +229,29 @@ impl Display for ElapsedSoundPlayerError {
     }
 }
 
+/// While any task holds one of these handles, the sound will continue to loop.
+/// Once all handles are dropped, the sound will stop playing.
+/// Only one instance of the sound will play at a time.
+#[must_use]
+pub struct LoopedSoundPlayback(
+    // This field is not supposed to be accessed, we use its Drop for side
+    // effects
+    #[allow(dead_code)] Arc<Sink>,
+);
+
+/// The result of a call to ElapsedSoundPlayer::play()
+/// if the daemon was started in oneshot mode, it will return OneShot, which can
+/// be discarded. If the daemon was started in looped mode, it will return a
+/// LoopedSoundPlayback, which should be held until the caller wants to stop the sound.
+pub enum Playback {
+    OneShot,
+    Looped(#[allow(dead_code)] LoopedSoundPlayback),
+}
+
 pub struct ElapsedSoundPlayer {
     sound: Arc<RwLock<Sound>>,
     output_stream: OutputStream,
+    sink: Mutex<Weak<Sink>>,
 }
 
 impl ElapsedSoundPlayer {
@@ -229,13 +265,44 @@ impl ElapsedSoundPlayer {
         let player = Self {
             sound: sound,
             output_stream: stream,
+            sink: Mutex::new(Weak::new()),
         };
         Ok(player)
     }
 
-    pub async fn play(&self) {
+    pub async fn play(&self) -> Playback {
         let s = self.sound.read().await.clone();
-        self.output_stream.mixer().add(s);
+        match s {
+            Sound::OneShot(buffered) => {
+                self.output_stream.mixer().add(buffered);
+                Playback::OneShot
+            }
+            Sound::Looped(buffered) => Playback::Looped(self.play_looped(buffered).await),
+        }
+    }
+
+    async fn play_looped(&self, sound: LoopedSound) -> LoopedSoundPlayback {
+        let sink_lock = self.sink.lock().await;
+        match sink_lock.upgrade() {
+            Some(sink) => LoopedSoundPlayback(sink),
+            None => {
+                let sink = self.new_looped_elapsed_sound_sink(sink_lock, sound).await;
+                LoopedSoundPlayback(sink)
+            }
+        }
+    }
+
+    async fn new_looped_elapsed_sound_sink(
+        &self,
+        mut lock: MutexGuard<'_, Weak<Sink>>,
+        sound: LoopedSound,
+    ) -> Arc<Sink> {
+        let mixer = self.output_stream.mixer();
+        let sink = Sink::connect_new(mixer);
+        sink.append(sound);
+        let arc = Arc::new(sink);
+        *lock = Arc::downgrade(&arc);
+        arc
     }
 }
 
