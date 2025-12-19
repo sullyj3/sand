@@ -1,7 +1,8 @@
 use std::ffi::OsStr;
 use std::fmt::Debug;
 use std::fmt::{self, Display, Formatter};
-use std::io::{self, Cursor, ErrorKind, Read};
+use std::fs::File;
+use std::io::{self, BufReader, Cursor, ErrorKind, Read};
 use std::path::{Path, PathBuf};
 use std::sync::{Arc, Weak};
 
@@ -54,10 +55,16 @@ impl From<io::Error> for SoundLoadError {
 
 type SoundLoadResult<T> = Result<T, SoundLoadError>;
 
-// type Sound = Buffered<Decoder<BufReader<File>>>;
+type OneShotSound = Buffered<Decoder<BufReader<File>>>;
 type LoopedSound = Buffered<LoopedDecoder<Cursor<Vec<u8>>>>;
 
-fn load_sound(path: &Path) -> SoundLoadResult<LoopedSound> {
+#[derive(Clone)]
+enum Sound {
+    OneShot(OneShotSound),
+    Looped(LoopedSound),
+}
+
+fn load_sound(path: &Path) -> SoundLoadResult<Sound> {
     let buf = {
         use std::fs::File;
         let mut file = File::open(path)?;
@@ -75,7 +82,7 @@ fn load_sound(path: &Path) -> SoundLoadResult<LoopedSound> {
     // let decoder =
     //     Decoder::try_from(file).map_err(|err| SoundLoadError::DecoderError(err.to_string()))?;
     let buffered = decoder.buffered();
-    Ok(buffered)
+    Ok(Sound::Looped(buffered))
 }
 
 const SOUND_FILENAME: &str = "timer_sound";
@@ -93,7 +100,7 @@ fn user_sound_path() -> SoundLoadResult<PathBuf> {
 
 const SUPPORTED_EXTENSIONS: &[&str] = &["mp3", "wav", "flac", "aac", "m4a", "ogg"];
 
-fn load_user_sound() -> SoundLoadResult<LoopedSound> {
+fn load_user_sound() -> SoundLoadResult<Sound> {
     let path_no_extension = user_sound_path()?;
     log::debug!(
         "Attempting to load user sound from {}.*",
@@ -120,7 +127,7 @@ fn load_user_sound() -> SoundLoadResult<LoopedSound> {
 }
 
 // TODO fix this mess
-fn load_default_sound() -> SoundLoadResult<LoopedSound> {
+fn load_default_sound() -> SoundLoadResult<Sound> {
     log::debug!("Attempting to load sound from default path");
 
     if cfg!(debug_assertions) {
@@ -178,7 +185,7 @@ fn load_default_sound() -> SoundLoadResult<LoopedSound> {
     }
 }
 
-fn load_elapsed_sound() -> SoundLoadResult<LoopedSound> {
+fn load_elapsed_sound() -> SoundLoadResult<Sound> {
     load_user_sound().or_else(|err| {
         match &err {
             SoundLoadError::NotFound => {
@@ -233,7 +240,7 @@ pub struct LoopedSoundPlayback(
 );
 
 pub struct ElapsedSoundPlayer {
-    sound: Arc<RwLock<LoopedSound>>,
+    sound: Arc<RwLock<Sound>>,
     output_stream: OutputStream,
     sink: Mutex<Weak<Sink>>,
 }
@@ -256,7 +263,11 @@ impl ElapsedSoundPlayer {
 
     pub async fn play(&self) {
         let s = self.sound.read().await.clone();
-        self.output_stream.mixer().add(s);
+        // TODO there's got to be a better way to do this
+        match s {
+            Sound::OneShot(buffered) => self.output_stream.mixer().add(buffered),
+            Sound::Looped(buffered) => self.output_stream.mixer().add(buffered),
+        }
     }
 
     pub async fn play_looped(&self) -> LoopedSoundPlayback {
@@ -274,21 +285,24 @@ impl ElapsedSoundPlayer {
         let mixer = self.output_stream.mixer();
         let sink = Sink::connect_new(mixer);
         let sound = self.sound.read().await.clone();
-        sink.append(sound);
+        match sound {
+            Sound::OneShot(buffered) => sink.append(buffered),
+            Sound::Looped(buffered) => sink.append(buffered),
+        }
         let arc = Arc::new(sink);
         *lock = Arc::downgrade(&arc);
         arc
     }
 }
 
-async fn refresh_sound(sound: &RwLock<LoopedSound>) -> Result<(), ElapsedSoundPlayerError> {
+async fn refresh_sound(sound: &RwLock<Sound>) -> Result<(), ElapsedSoundPlayerError> {
     log::info!("Refreshing sound.");
     let new_sound = load_elapsed_sound()?;
     *sound.write().await = new_sound;
     Ok(())
 }
 
-async fn refresh_sound_when_changed(sound: Arc<RwLock<LoopedSound>>) {
+async fn refresh_sound_when_changed(sound: Arc<RwLock<Sound>>) {
     let data_dir: PathBuf = match sand_user_data_dir() {
         Ok(p) => p,
         Err(err) => {
