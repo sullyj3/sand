@@ -80,12 +80,9 @@ pub fn main(cli_cmd: cli::ClientCommand) -> io::Result<()> {
                 e
             );
 
-            match e.kind() {
-                io::ErrorKind::ConnectionRefused => {
-                    eprintln!("");
-                    eprintln!("Is the daemon running?");
-                }
-                _ => {}
+            if e.kind() == io::ErrorKind::ConnectionRefused {
+                eprintln!();
+                eprintln!("Is the daemon running?");
             }
 
             std::process::exit(1);

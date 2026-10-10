@@ -13,7 +13,6 @@ use std::os::unix;
 use std::os::unix::fs::FileTypeExt;
 use std::path::PathBuf;
 use std::sync::Arc;
-use tokio;
 use tokio::sync::Notify;
 use tokio::sync::RwLock;
 
@@ -195,11 +194,9 @@ fn get_socket() -> io::Result<tokio::net::UnixListener> {
 pub fn main(_args: cli::DaemonArgs) -> io::Result<()> {
     // Logging
     let mut log_builder = colog::default_builder();
-    if std::env::var("RUST_LOG").is_err() {
-        if cfg!(debug_assertions) {
-            log_builder.filter_level(log::LevelFilter::Debug);
-        };
-    }
+    if std::env::var("RUST_LOG").is_err() && cfg!(debug_assertions) {
+        log_builder.filter_level(log::LevelFilter::Debug);
+    };
     log_builder.init();
     log::info!("Starting sand daemon v{}", env!("CARGO_PKG_VERSION"));
 

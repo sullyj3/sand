@@ -47,7 +47,7 @@ pub async fn handle_client(mut stream: UnixStream, state: Arc<DaemonCtx>) {
             }
         };
         let line: &str = line.trim();
-        let rcmd: Result<Command, Error> = serde_json::from_str(&line);
+        let rcmd: Result<Command, Error> = serde_json::from_str(line);
 
         let resp: Response = match rcmd {
             Ok(cmd) => handle_command(cmd, &state).await,

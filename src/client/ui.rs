@@ -18,7 +18,7 @@ struct TableConfig<'a> {
 
 // TODO this needs a complete rework
 pub fn ls(mut timers: Vec<TimerInfo>) -> impl Display {
-    if timers.len() == 0 {
+    if timers.is_empty() {
         return "There are currently no timers.\n".to_owned();
     };
 
@@ -89,24 +89,24 @@ pub fn ls(mut timers: Vec<TimerInfo>) -> impl Display {
     let message_header_padded = format!("{:<message_column_width$}", message_header);
 
     // Header
-    write!(
+    writeln!(
         output,
-        "{status_header}{gap}{}{gap}{}{gap}{}\n",
+        "{status_header}{gap}{}{gap}{}{gap}{}",
         id_header_padded.underlined(),
         remaining_header_padded.underlined(),
         message_header_padded.underlined(),
     )
     .unwrap();
 
-    if running.len() > 0 {
+    if !running.is_empty() {
         for timer in running {
             timers_table_row(&mut output, timer, &table_config);
         }
-        if paused.len() > 0 {
-            output.push_str("\n");
+        if !paused.is_empty() {
+            output.push('\n');
         }
     }
-    if paused.len() > 0 {
+    if !paused.is_empty() {
         for timer in paused {
             timers_table_row(&mut output, timer, &table_config);
         }
@@ -135,8 +135,8 @@ fn timers_table_row(output: &mut impl Write, timer_info: &TimerInfo, table_confi
         gap,
     } = table_config;
     let message: &str = timer_info.message.as_deref().unwrap_or("");
-    write!(output,
-        "{play_pause:>status_column_width$}{gap}{:>id_column_width$}{gap}{remaining:>remaining_column_width$}{gap}{message:<message_column_width$}\n",
+    writeln!(output,
+        "{play_pause:>status_column_width$}{gap}{:>id_column_width$}{gap}{remaining:>remaining_column_width$}{gap}{message:<message_column_width$}",
         // need the string conversion first for the padding to work
         id.to_string(),
     ).unwrap();

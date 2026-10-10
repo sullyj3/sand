@@ -227,7 +227,7 @@ impl ElapsedSoundPlayer {
         tokio::spawn(refresh_sound_when_changed(sound.clone()));
 
         let player = Self {
-            sound: sound,
+            sound,
             output_stream: stream,
         };
         Ok(player)
