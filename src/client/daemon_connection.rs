@@ -62,9 +62,28 @@ impl DaemonConnection {
 
     fn recv<T: for<'de> Deserialize<'de>>(&mut self) -> io::Result<T> {
         let mut recv_buf = String::with_capacity(128);
-        self.read.read_line(&mut recv_buf)?;
-        let resp: T = serde_json::from_str(&recv_buf)
-            .expect("Bug: failed to deserialize response from daemon");
-        Ok(resp)
+        let bytes_read = self.read.read_line(&mut recv_buf)?;
+
+        if bytes_read == 0 {
+            return Err(io::Error::new(
+                io::ErrorKind::UnexpectedEof,
+                "Connection to daemon closed before a response was received",
+            ));
+        }
+
+        if let Ok(resp) = serde_json::from_str::<T>(&recv_buf) {
+            return Ok(resp);
+        }
+
+        // `Response::Error` serializes as a bare JSON string, since `Response`
+        // is `#[serde(untagged)]`. The daemon sends this when it couldn't
+        // handle our request, e.g. a client/daemon protocol mismatch.
+        if let Ok(err_msg) = serde_json::from_str::<String>(&recv_buf) {
+            return Err(io::Error::new(io::ErrorKind::InvalidData, err_msg));
+        }
+
+        Err(io::Error::other(format!(
+            "failed to parse response from daemon: {recv_buf:?}"
+        )))
     }
 }
