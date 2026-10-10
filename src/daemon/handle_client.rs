@@ -59,7 +59,10 @@ pub async fn handle_client(mut stream: UnixStream, state: Arc<DaemonCtx>) {
         };
         let mut resp_str: String = serde_json::to_string(&resp).unwrap();
         resp_str.push('\n');
-        write_half.write_all(resp_str.as_bytes()).await.unwrap();
+        if let Err(e) = write_half.write_all(resp_str.as_bytes()).await {
+            log::error!("Failed to write response to client: {e}");
+            break;
+        }
     }
 
     log::trace!("Client disconnected");
