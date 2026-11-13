@@ -85,6 +85,20 @@ pub fn main(cli_cmd: cli::ClientCommand) -> io::Result<()> {
                 eprintln!("Is the daemon running?");
             }
 
+            if socket::env_sock_path().is_some() {
+                eprintln!();
+                eprintln!(
+                    "Note: this socket path was set by the SAND_SOCK_PATH environment variable."
+                );
+                match socket::default_sock_path() {
+                    Some(default) => eprintln!(
+                        "Unset it to use the default socket `{}`.",
+                        default.to_string_lossy()
+                    ),
+                    None => eprintln!("Unset it to use the default socket."),
+                }
+            }
+
             std::process::exit(1);
         }
     };
