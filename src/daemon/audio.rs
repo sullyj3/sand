@@ -9,7 +9,7 @@ use std::sync::Arc;
 use indoc::indoc;
 use notify::{RecursiveMode, Watcher as _};
 use rodio::source::Buffered;
-use rodio::{Decoder, OutputStream, Source};
+use rodio::{Decoder, MixerDeviceSink, Source};
 use tokio::sync::RwLock;
 use tokio_stream::StreamExt as _;
 use tokio_stream::wrappers::ReceiverStream;
@@ -185,7 +185,7 @@ fn load_elapsed_sound() -> SoundLoadResult<Sound> {
 
 pub enum ElapsedSoundPlayerError {
     SoundLoadError(SoundLoadError),
-    StreamError(rodio::StreamError),
+    DeviceSinkError(rodio::DeviceSinkError),
 }
 
 impl From<SoundLoadError> for ElapsedSoundPlayerError {
@@ -194,9 +194,9 @@ impl From<SoundLoadError> for ElapsedSoundPlayerError {
     }
 }
 
-impl From<rodio::StreamError> for ElapsedSoundPlayerError {
-    fn from(err: rodio::StreamError) -> Self {
-        Self::StreamError(err)
+impl From<rodio::DeviceSinkError> for ElapsedSoundPlayerError {
+    fn from(err: rodio::DeviceSinkError) -> Self {
+        Self::DeviceSinkError(err)
     }
 }
 
@@ -206,8 +206,8 @@ impl Display for ElapsedSoundPlayerError {
             ElapsedSoundPlayerError::SoundLoadError(err) => {
                 write!(f, "Error loading the audio file: {}", err)
             }
-            ElapsedSoundPlayerError::StreamError(err) => {
-                write!(f, "Failed to initialize OutputStream: {}", err)
+            ElapsedSoundPlayerError::DeviceSinkError(err) => {
+                write!(f, "Failed to open audio output: {}", err)
             }
         }
     }
@@ -215,13 +215,14 @@ impl Display for ElapsedSoundPlayerError {
 
 pub struct ElapsedSoundPlayer {
     sound: Arc<RwLock<Sound>>,
-    output_stream: OutputStream,
+    output_stream: MixerDeviceSink,
 }
 
 impl ElapsedSoundPlayer {
     pub fn new() -> Result<Self, ElapsedSoundPlayerError> {
-        let stream = rodio::OutputStreamBuilder::open_default_stream()
+        let mut stream = rodio::DeviceSinkBuilder::open_default_sink()
             .inspect_err(|e| log::debug!("{e}"))?;
+        stream.log_on_drop(false);
         let sound = load_elapsed_sound().inspect_err(|e| log::warn!("{e}"))?;
         let sound = Arc::new(RwLock::new(sound));
         tokio::spawn(refresh_sound_when_changed(sound.clone()));
