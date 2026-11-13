@@ -5,11 +5,13 @@ use std::fs::File;
 use std::io::{self, BufReader, ErrorKind};
 use std::path::{Path, PathBuf};
 use std::sync::Arc;
+use std::sync::atomic::{AtomicUsize, Ordering};
+use std::time::Duration;
 
 use indoc::indoc;
 use notify::{RecursiveMode, Watcher as _};
 use rodio::source::Buffered;
-use rodio::{Decoder, MixerDeviceSink, Source};
+use rodio::{Decoder, Player, Source};
 use tokio::sync::RwLock;
 use tokio_stream::StreamExt as _;
 use tokio_stream::wrappers::ReceiverStream;
@@ -213,31 +215,75 @@ impl Display for ElapsedSoundPlayerError {
     }
 }
 
+/// How often to check whether the sound has finished playing.
+const PLAYBACK_POLL_INTERVAL: Duration = Duration::from_millis(100);
+
+/// If the audio stream reports this many errors during a single playback,
+/// assume it's broken and give up rather than spinning.
+const MAX_STREAM_ERRORS: usize = 50;
+
+/// Plays the timer elapsed sound.
+///
+/// The audio output stream is only opened while a sound is playing. Keeping a
+/// stream open permanently means the audio thread wakes up constantly to mix
+/// silence, and if the stream breaks (eg across a suspend or an audio server
+/// restart) it can get stuck in a busy error loop for the rest of the daemon's
+/// lifetime.
 pub struct ElapsedSoundPlayer {
     sound: Arc<RwLock<Sound>>,
-    output_stream: MixerDeviceSink,
 }
 
 impl ElapsedSoundPlayer {
     pub fn new() -> Result<Self, ElapsedSoundPlayerError> {
-        let mut stream = rodio::DeviceSinkBuilder::open_default_sink()
-            .inspect_err(|e| log::debug!("{e}"))?;
-        stream.log_on_drop(false);
         let sound = load_elapsed_sound().inspect_err(|e| log::warn!("{e}"))?;
         let sound = Arc::new(RwLock::new(sound));
         tokio::spawn(refresh_sound_when_changed(sound.clone()));
-
-        let player = Self {
-            sound,
-            output_stream: stream,
-        };
-        Ok(player)
+        Ok(Self { sound })
     }
 
+    /// Start playing the sound in the background. Returns immediately.
     pub async fn play(&self) {
-        let s = self.sound.read().await.clone();
-        self.output_stream.mixer().add(s);
+        let sound = self.sound.read().await.clone();
+        tokio::task::spawn_blocking(move || {
+            if let Err(err) = play_blocking(sound) {
+                log::error!("Failed to play timer sound: {err}");
+            }
+        });
     }
+}
+
+/// Open an output stream, play `sound` to completion, then close the stream.
+fn play_blocking(sound: Sound) -> Result<(), ElapsedSoundPlayerError> {
+    let error_count = Arc::new(AtomicUsize::new(0));
+    let mut sink = rodio::DeviceSinkBuilder::from_default_device()?
+        .with_error_callback({
+            let error_count = error_count.clone();
+            move |err| {
+                // Only log the first error, to avoid flooding the journal if
+                // the stream gets into a bad state.
+                if error_count.fetch_add(1, Ordering::Relaxed) == 0 {
+                    log::warn!("Audio stream error: {err}");
+                }
+            }
+        })
+        .open_stream()?;
+    sink.log_on_drop(false);
+
+    let player = Player::connect_new(sink.mixer());
+    player.append(sound);
+    while !player.empty() {
+        let errors = error_count.load(Ordering::Relaxed);
+        if errors >= MAX_STREAM_ERRORS {
+            log::error!("Audio stream reported {errors} errors, giving up on playing sound");
+            break;
+        }
+        std::thread::sleep(PLAYBACK_POLL_INTERVAL);
+    }
+    let errors = error_count.load(Ordering::Relaxed);
+    if errors > 1 {
+        log::warn!("Audio stream reported {errors} errors during playback");
+    }
+    Ok(())
 }
 
 async fn refresh_sound(sound: &RwLock<Sound>) -> Result<(), ElapsedSoundPlayerError> {
